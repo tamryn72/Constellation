@@ -172,6 +172,17 @@ document.getElementById('tool-clear').addEventListener('click', () => tools.clea
 document.getElementById('tool-delete').addEventListener('click', () => tools.toggleDeleteMode());
 document.getElementById('tool-paint').addEventListener('click', () => tools.togglePaintMode());
 document.getElementById('tool-paint-row').addEventListener('click', () => tools.paintActiveRow());
+document.getElementById('tool-fold').addEventListener('click', () => {
+  const p = activePanel();
+  if (p.mode !== 'flat') {
+    alert('Fold lines are for flat panels only.');
+    return;
+  }
+  const activeIdx = tools.getActiveRow();
+  const label = window.prompt('Fold label:', 'fold') || 'fold';
+  p.folds.push({ axis: 'row', at: activeIdx + 1, label });
+  rerender();
+});
 
 setupExport({ state, canvas });
 

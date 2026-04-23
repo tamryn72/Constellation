@@ -6,6 +6,12 @@ import { STITCHES } from './stitches.js';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const PADDING = 2;   // in cell-units, on each side of the grid
 
+function escapeXml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
 // --- pure: layout ---
 
 // rows[0] is the foundation; rows[i>0] builds on rows[i-1]. Each stitch is
@@ -176,6 +182,25 @@ export function render(canvas, state) {
     const r = laid.rows[i];
     out += `<line class="row-baseline" x1="0" y1="${r.baselineY}" x2="${laid.width}" y2="${r.baselineY}"/>`;
     out += `<text class="row-label" x="6" y="${r.baselineY - 4}">R${i}${r.valid ? '' : ' ⚠'}</text>`;
+  }
+
+  // Fold lines on the active panel (flat only): horizontal between rows.
+  const panel = window.__constellation__?.state
+    ? window.__constellation__.state.panels[window.__constellation__.state.activePanelIdx]
+    : null;
+  const folds = panel?.folds ?? [];
+  for (const f of folds) {
+    if (f.axis !== 'row') continue;   // row folds only for flat mode
+    const at = Math.max(0, Math.min(f.at, laid.rows.length));
+    // Line between row (at-1) and row (at), so y = row at's baseline (which is row at's bottom)
+    const y = at < laid.rows.length
+      ? laid.rows[at].baselineY
+      : laid.rows[laid.rows.length - 1].baselineY - state.cellSize;  // fold above last row
+    out += `<line x1="0" y1="${y}" x2="${laid.width}" y2="${y}"
+      stroke="#7c3aed" stroke-width="2" stroke-dasharray="8 4" opacity="0.7"/>`;
+    out += `<text x="${laid.width - 8}" y="${y - 4}"
+      fill="#7c3aed" font-size="11" text-anchor="end" style="font-style:italic;">
+      ${escapeXml(f.label || 'fold')}</text>`;
   }
 
   // Invalid row underlines
