@@ -250,42 +250,105 @@ Stitches are appended to rows, not dropped at arbitrary xy. The user selects a r
 
 ## SVG Stitch Rendering
 
-Each stitch has a `renderSVG(color, cellSize)` function that returns an SVG string. The SVG viewport = `stitch.cols * cellSize` wide, `stitch.rows * cellSize` tall.
+Every stitch is rendered as one or more **thick legs** drawn between anchor points the grid engine has already computed. The renderer receives absolute coordinates — it doesn't do layout, only shape.
 
-### Example — Double Crochet
 ```javascript
-renderSVG: (color, cellSize) => {
-  const w = cellSize;
-  const h = cellSize * 3;
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-    <!-- stem -->
-    <line x1="${w/2}" y1="${h}" x2="${w/2}" y2="${h*0.2}" stroke="${color}" stroke-width="2"/>
-    <!-- crossbar -->
-    <line x1="${w*0.2}" y1="${h*0.5}" x2="${w*0.8}" y2="${h*0.5}" stroke="${color}" stroke-width="2"/>
-    <!-- top hook -->
-    <path d="M${w/2} ${h*0.2} Q${w*0.7} 0 ${w*0.9} ${h*0.1}" stroke="${color}" fill="none" stroke-width="2"/>
-  </svg>`;
+renderSVG({ bottomAnchors, topAnchors, cellSize, color }) => svgString
+// bottomAnchors: [{x, y}, ...] — one per baseAnchors
+// topAnchors:    [{x, y}, ...] — one per topAnchors
+```
+
+All coordinates are in the same SVG coordinate space as the grid, so the renderer returns `<g>...</g>` fragments (not standalone `<svg>`s) that the grid layer composites.
+
+### Example — Single Crochet (1→1, h=1)
+One short thick leg, with a small X cap near the top to mark it as sc.
+```javascript
+renderSVG: ({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) => {
+  const sw = cellSize * 0.18;              // stroke width scales with zoom
+  const capY = t.y + cellSize * 0.15;
+  const capHalf = cellSize * 0.22;
+  return `<g stroke="${color}" stroke-width="${sw}" stroke-linecap="round" fill="none">
+    <line x1="${b.x}" y1="${b.y}" x2="${t.x}" y2="${t.y}"/>
+    <line x1="${t.x - capHalf}" y1="${capY - capHalf}" x2="${t.x + capHalf}" y2="${capY + capHalf}"/>
+    <line x1="${t.x - capHalf}" y1="${capY + capHalf}" x2="${t.x + capHalf}" y2="${capY - capHalf}"/>
+  </g>`;
 }
 ```
 
-### Example — Shell Stitch
+### Example — Double Crochet (1→1, h=3)
+One tall thick leg, crossbar at midpoint, hook at top.
 ```javascript
-renderSVG: (color, cellSize) => {
-  const w = cellSize * 5;
-  const h = cellSize * 3;
-  const cx = w / 2;
-  const base = h * 0.9;
-  // 5 arcs fanning from center base point
-  const angles = [-60, -30, 0, 30, 60];
-  const spokes = angles.map(a => {
-    const rad = (a * Math.PI) / 180;
-    const tx = cx + Math.sin(rad) * h * 0.8;
-    const ty = base - Math.cos(rad) * h * 0.8;
-    return `<line x1="${cx}" y1="${base}" x2="${tx}" y2="${ty}" stroke="${color}" stroke-width="2.5"/>`;
+renderSVG: ({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) => {
+  const sw = cellSize * 0.18;
+  const midY = (b.y + t.y) / 2;
+  const half = cellSize * 0.3;
+  return `<g stroke="${color}" stroke-width="${sw}" stroke-linecap="round" fill="none">
+    <line x1="${b.x}" y1="${b.y}" x2="${t.x}" y2="${t.y}"/>
+    <line x1="${t.x - half}" y1="${midY}" x2="${t.x + half}" y2="${midY}"/>
+    <path d="M${t.x} ${t.y} q ${cellSize*0.3} ${-cellSize*0.15} ${cellSize*0.45} ${cellSize*0.05}"/>
+  </g>`;
+}
+```
+Because `b` and `t` come from the grid engine, a dc sitting above an increase/decrease can lean naturally — the same renderer handles any pair of endpoints.
+
+### Example — DC Decrease (2→1, h=3) — THE key case
+Two dc legs sharing one top anchor. The grid engine gives us two bottom anchors and one top anchor (positioned at their midpoint). Drawing a leg from each bottom to the shared top produces legs that physically lean inward and pull the base stitches together.
+```javascript
+renderSVG: ({ bottomAnchors: [bL, bR], topAnchors: [t], cellSize, color }) => {
+  const sw = cellSize * 0.18;
+  const half = cellSize * 0.25;
+  const leg = (b) => {
+    const midY = (b.y + t.y) / 2;
+    const midX = (b.x + t.x) / 2;
+    return `
+      <line x1="${b.x}" y1="${b.y}" x2="${t.x}" y2="${t.y}"/>
+      <line x1="${midX - half}" y1="${midY}" x2="${midX + half}" y2="${midY}"/>`;
+  };
+  return `<g stroke="${color}" stroke-width="${sw}" stroke-linecap="round" fill="none">
+    ${leg(bL)}${leg(bR)}
+    <path d="M${t.x} ${t.y} q ${cellSize*0.3} ${-cellSize*0.15} ${cellSize*0.45} ${cellSize*0.05}"/>
+  </g>`;
+}
+```
+Note: no hard-coded angle. The lean is entirely a function of where the base anchors sit, which is entirely a function of the row below — mathematically accurate.
+
+### Example — Shell (1→5, h=3)
+One base anchor, five top anchors spread in a fan. Five legs, one per top.
+```javascript
+renderSVG: ({ bottomAnchors: [b], topAnchors, cellSize, color }) => {
+  const sw = cellSize * 0.18;
+  const midY = (b.y + topAnchors[0].y) / 2;
+  const half = cellSize * 0.15;
+  const legs = topAnchors.map(t => {
+    const midX = (b.x + t.x) / 2;
+    return `
+      <line x1="${b.x}" y1="${b.y}" x2="${t.x}" y2="${t.y}"/>
+      <line x1="${midX - half}" y1="${midY}" x2="${midX + half}" y2="${midY}"/>`;
   }).join('');
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${spokes}</svg>`;
+  return `<g stroke="${color}" stroke-width="${sw}" stroke-linecap="round" fill="none">${legs}</g>`;
 }
 ```
+
+### Example — Puff / Bobble (1→1, h=2)
+One leg with a bulge on the stem.
+```javascript
+renderSVG: ({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) => {
+  const sw = cellSize * 0.18;
+  const midX = (b.x + t.x) / 2;
+  const midY = (b.y + t.y) / 2;
+  const r = cellSize * 0.28;
+  return `<g stroke="${color}" stroke-width="${sw}" stroke-linecap="round" fill="none">
+    <line x1="${b.x}" y1="${b.y}" x2="${t.x}" y2="${t.y}"/>
+    <ellipse cx="${midX}" cy="${midY}" rx="${r}" ry="${r * 1.2}" fill="${color}" fill-opacity="0.25"/>
+  </g>`;
+}
+```
+
+### Style rules
+- Stroke width scales with `cellSize` so thickness is proportional at every zoom (`cellSize * 0.18` is a good default)
+- `stroke-linecap="round"` on all legs — real crochet stitches look rounded, not blocky
+- Never hard-code pixel values; everything derives from anchors or `cellSize`
+- Leg shapes lean by geometry, never by stored rotation angles
 
 ---
 
