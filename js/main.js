@@ -7,6 +7,7 @@ import { buildPalette } from './palette.js';
 import { createTools } from './tools.js';
 import { setupExport } from './export.js';
 import { showPatternModal } from './pattern.js';
+import { buildPanelTabs } from './panels.js';
 
 // ---------- initial state ----------
 
@@ -178,9 +179,34 @@ document.getElementById('tool-pattern').addEventListener('click', () => {
   showPatternModal(state);
 });
 
+// ---------- panel tabs ----------
+
+function refreshChrome() {
+  // Sync mode toggle buttons to active panel's mode.
+  const mode = activePanel().mode;
+  document.getElementById('mode-flat').classList.toggle('is-active', mode === 'flat');
+  document.getElementById('mode-round').classList.toggle('is-active', mode === 'round');
+  document.getElementById('mode-flat').setAttribute('aria-selected', String(mode === 'flat'));
+  document.getElementById('mode-round').setAttribute('aria-selected', String(mode === 'round'));
+}
+
+const panelTabs = buildPanelTabs({
+  state,
+  rerender,
+  onSwitch: () => {
+    tools?.onModeChange?.();
+    refreshChrome();
+  },
+});
+
 // ---------- first render ----------
 
 rerender();
 
-// Expose for quick debugging in console
-window.__constellation__ = { state, rerender, STITCHES };
+// Expose for debugging + cross-module helpers (e.g. export.js reload).
+window.__constellation__ = {
+  state,
+  rerender,
+  refreshChrome: () => { refreshChrome(); panelTabs.render(); },
+  STITCHES,
+};

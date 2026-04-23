@@ -75,7 +75,57 @@ body {
   position: relative;
   background: var(--bg-canvas);
   overflow: auto;
+  display: grid;
+  grid-template-rows: auto 1fr;
 }
+#panel-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  flex-wrap: nowrap;
+}
+.panel-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--fg-dim);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.panel-tab:hover { color: var(--fg); background: rgba(192,132,252,0.08); }
+.panel-tab.is-active {
+  background: var(--accent);
+  color: #1a1825;
+  font-weight: 600;
+}
+.panel-tab .tab-close {
+  background: transparent;
+  color: inherit;
+  border: 0;
+  padding: 0 2px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.panel-tab .tab-close:hover { opacity: 1; }
+.panel-tab-new {
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--fg-dim);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  font: inherit;
+  cursor: pointer;
+}
+.panel-tab-new:hover { color: var(--accent); border-color: var(--accent); }
 #canvas {
   display: block;
   width: 100%;
