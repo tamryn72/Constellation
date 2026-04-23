@@ -7,13 +7,13 @@ export function setupExport({ state, canvas }) {
 
   saveBtn?.addEventListener('click', () => {
     const payload = {
-      constellation: 1,
-      mode: state.mode,
+      constellation: 2,
       cellSize: state.cellSize,
       selectedColor: state.selectedColor,
       fabricColor: state.fabricColor,
-      rows: state.rows,
-      rounds: state.rounds,
+      panels: state.panels,
+      activePanelIdx: state.activePanelIdx,
+      seams: state.seams,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -30,13 +30,41 @@ export function setupExport({ state, canvas }) {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      if (data.mode) state.mode = data.mode;
       if (data.cellSize) state.cellSize = data.cellSize;
       if (data.selectedColor) state.selectedColor = data.selectedColor;
       if (data.fabricColor) state.fabricColor = data.fabricColor;
-      if (Array.isArray(data.rows)) state.rows = data.rows;
-      if (Array.isArray(data.rounds)) state.rounds = data.rounds;
+
+      if (Array.isArray(data.panels)) {
+        // v2: full project file
+        state.panels = data.panels.map(p => ({
+          id: p.id ?? ('p' + Math.random().toString(36).slice(2, 7)),
+          name: p.name ?? 'Panel',
+          mode: p.mode ?? 'flat',
+          rows: p.rows ?? [[]],
+          rounds: p.rounds ?? [[{ id: 'magic_ring' }]],
+          folds: p.folds ?? [],
+          edges: p.edges ?? {},
+        }));
+        state.activePanelIdx = Math.min(data.activePanelIdx ?? 0, state.panels.length - 1);
+        state.seams = Array.isArray(data.seams) ? data.seams : [];
+      } else if (Array.isArray(data.rows) || Array.isArray(data.rounds)) {
+        // v1: single-panel legacy file. Wrap it.
+        state.panels = [{
+          id: 'p1',
+          name: 'Panel 1',
+          mode: data.mode ?? 'flat',
+          rows:   Array.isArray(data.rows)   ? data.rows   : [[]],
+          rounds: Array.isArray(data.rounds) ? data.rounds : [[{ id: 'magic_ring' }]],
+          folds: [],
+          edges: {},
+        }];
+        state.activePanelIdx = 0;
+        state.seams = [];
+      }
+      // Re-point shared refs to the active panel.
+      state.__syncFromPanel?.();
       window.__constellation__?.rerender?.();
+      window.__constellation__?.refreshChrome?.();
     } catch (err) {
       alert('Could not load pattern: ' + err.message);
     } finally {

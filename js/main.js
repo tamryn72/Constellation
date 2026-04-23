@@ -10,31 +10,65 @@ import { showPatternModal } from './pattern.js';
 
 // ---------- initial state ----------
 
-const state = {
-  mode: 'flat',                  // 'flat' | 'round'
-  cellSize: 28,
-  selectedColor: '#c084fc',
-  fabricColor: '#faf7f2',
-  rows: [                        // flat mode
-    // Demo: 10-chain foundation + a row that consumes exactly 10 so it's valid.
+function makePanel({ id, name, mode = 'flat', rows, rounds }) {
+  return {
+    id,
+    name,
+    mode,
+    rows:   rows   ?? [[]],
+    rounds: rounds ?? [[{ id: 'magic_ring' }]],
+    folds:  [],
+    edges:  {},    // e.g. { top: 'neckline', left: 'side-seam' }
+  };
+}
+
+const demoPanel = makePanel({
+  id: 'p1',
+  name: 'Panel 1',
+  mode: 'flat',
+  rows: [
     Array.from({ length: 10 }, () => ({ id: 'ch' })),
     [
       { id: 'sc' }, { id: 'sc' },
-      { id: 'sc_dec' },            // 2 → 1, legs lean inward
+      { id: 'sc_dec' },
       { id: 'dc' },
-      { id: 'dc_dec' },            // 2 → 1
+      { id: 'dc_dec' },
       { id: 'dc' },
-      { id: 'shell' },             // 1 → 5, fan
-      { id: 'sc' },                // base total: 1+1+2+1+2+1+1+1 = 10 ✓
+      { id: 'shell' },
+      { id: 'sc' },
     ],
   ],
-  rounds: [                      // round mode
-    // Standard amigurumi increase pattern: 6, 12, 18 — each round lies flat.
-    [ { id: 'magic_ring' } ],                                             // → 6 tops
-    Array.from({ length: 6 }, () => ({ id: 'sc_inc' })),                  // 6 → 12 tops
-    Array.from({ length: 6 }, () => [{ id: 'sc' }, { id: 'sc_inc' }]).flat(), // 12 → 18 tops
+  rounds: [
+    [ { id: 'magic_ring' } ],
+    Array.from({ length: 6 }, () => ({ id: 'sc_inc' })),
+    Array.from({ length: 6 }, () => [{ id: 'sc' }, { id: 'sc_inc' }]).flat(),
   ],
+});
+
+const state = {
+  cellSize: 28,
+  selectedColor: '#c084fc',
+  fabricColor: '#faf7f2',
+  panels: [demoPanel],
+  activePanelIdx: 0,
+  seams: [],          // { a:{panelId, edge}, b:{panelId, edge}, note }
+  // These three are shared references to the active panel's fields, kept in
+  // sync on panel switch so every existing module keeps working unchanged.
+  mode:   demoPanel.mode,
+  rows:   demoPanel.rows,
+  rounds: demoPanel.rounds,
 };
+
+export function activePanel() { return state.panels[state.activePanelIdx]; }
+
+function syncStateToPanel() {
+  const p = activePanel();
+  state.mode   = p.mode;
+  state.rows   = p.rows;
+  state.rounds = p.rounds;
+}
+// Expose so tools can call it after mode change (mode lives on the panel now).
+state.__syncFromPanel = syncStateToPanel;
 
 // ---------- DOM refs ----------
 
@@ -102,6 +136,7 @@ tools.bindCanvas();
 
 function setMode(mode) {
   state.mode = mode;
+  activePanel().mode = mode;
   const flatBtn = document.getElementById('mode-flat');
   const roundBtn = document.getElementById('mode-round');
   flatBtn.classList.toggle('is-active', mode === 'flat');
