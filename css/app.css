@@ -13,7 +13,7 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
-html { height: 100%; }
+html, body { height: 100vh; height: 100dvh; }
 body {
   font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   background: var(--bg);
@@ -21,10 +21,6 @@ body {
   display: grid;
   grid-template-rows: auto 1fr auto;
   overflow: hidden;
-  /* Use dynamic viewport height so mobile browser chrome doesn't clip us. */
-  min-height: 100vh;
-  min-height: 100dvh;
-  height: 100dvh;
 }
 
 #app-header {
