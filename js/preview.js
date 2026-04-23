@@ -17,13 +17,14 @@ function escape(s) {
 
 // Layout a panel (at preview cellSize) and produce { svg, w, h, panel, bbox }.
 // bbox has {top, bottom, left, right} edge midpoints in preview coords.
-function renderPanelFragment(panel, fabricColor) {
+function renderPanelFragment(panel, fabricColor, stitchStyle = 'realistic') {
   const miniState = {
     cellSize: PREVIEW_CELL,
     fabricColor,
     mode: panel.mode,
     rows:   panel.rows,
     rounds: panel.rounds,
+    stitchStyle,
   };
 
   let body = '';
@@ -45,6 +46,7 @@ function renderPanelFragment(panel, fabricColor) {
           topAnchors:    s.topAnchors,
           cellSize: PREVIEW_CELL,
           color,
+          style: miniState.stitchStyle,
         });
       }
     }
@@ -85,6 +87,7 @@ function renderPanelFragment(panel, fabricColor) {
           topAnchors:    s.topAnchors,
           cellSize: PREVIEW_CELL,
           color,
+          style: miniState.stitchStyle,
         });
       }
     }
@@ -193,7 +196,7 @@ export function showPreviewModal(state) {
   document.getElementById('preview-modal')?.remove();
 
   const fabric = state.fabricColor || '#faf7f2';
-  const fragments = state.panels.map(p => renderPanelFragment(p, fabric));
+  const fragments = state.panels.map(p => renderPanelFragment(p, fabric, state.stitchStyle || 'realistic'));
   const { placements, width, height } = arrangePanels(fragments);
   const edgesByPanel = absoluteEdges(placements);
 
