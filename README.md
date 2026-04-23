@@ -112,67 +112,70 @@ Round layout is identical to flat, but anchor x becomes an angle. Round N's circ
 
 ## Stitch Library — Full Catalogue
 
+Columns:
+- **h** — height in cells
+- **base→top** — anchor count on row below → anchor count exposed upward (the math that determines how the stitch reshapes the row)
+
 ### Category: Foundation
-| Stitch | cols | rows | Shape Description |
-|--------|------|------|-------------------|
-| Magic Ring | 2 | 2 | Circle with loop arrow |
-| Chain | 1 | 1 | Oval/link shape |
-| Slip Stitch | 1 | 1 | Tiny filled dot |
+| Stitch | h | base→top | Shape |
+|--------|---|----------|-------|
+| Magic Ring | 1 | 0→N | Circle; N chosen at placement (typically 6 or 8) |
+| Chain | 1 | 1→1 | Oval/link leg |
+| Slip Stitch | 1 | 1→1 | Tiny filled bar |
 
-### Category: Basic
-| Stitch | cols | rows | Shape Description |
-|--------|------|------|-------------------|
-| Single Crochet | 1 | 1 | X cross shape |
-| Half Double Crochet | 1 | 2 | T with short stem |
-| Double Crochet | 1 | 3 | T with one crossbar |
-| Treble Crochet | 1 | 4 | T with two crossbars |
-| Double Treble | 1 | 5 | T with three crossbars |
-| Triple Treble | 1 | 6 | T with four crossbars |
+### Category: Basic (all 1→1, single leg, varying height)
+| Stitch | h | base→top | Shape |
+|--------|---|----------|-------|
+| Single Crochet | 1 | 1→1 | Short stem + small X cap |
+| Half Double | 2 | 1→1 | Stem with short bar near top |
+| Double | 3 | 1→1 | Stem with one crossbar + hook top |
+| Treble | 4 | 1→1 | Stem with two crossbars |
+| Double Treble | 5 | 1→1 | Stem with three crossbars |
+| Triple Treble | 6 | 1→1 | Stem with four crossbars |
 
-### Category: Textured
-| Stitch | cols | rows | Shape Description |
-|--------|------|------|-------------------|
-| Bobble | 1 | 2 | Rounded puff bump |
-| Puff Stitch | 1 | 2 | Oval puff cluster |
-| Popcorn | 2 | 2 | Round raised dome |
-| Bullion | 1 | 3 | Elongated coiled roll |
-| Waffle | 2 | 2 | Raised square grid texture |
-| Berry Stitch | 2 | 2 | Small clustered knot |
+### Category: Textured (1→1, leg with a bulge on the stem)
+| Stitch | h | base→top | Shape |
+|--------|---|----------|-------|
+| Bobble | 2 | 1→1 | Rounded bulge at stem midpoint |
+| Puff Stitch | 2 | 1→1 | Oval puff on stem |
+| Popcorn | 2 | 1→1 | Round raised dome on stem |
+| Bullion | 3 | 1→1 | Elongated coiled-roll stem |
+| Berry Stitch | 2 | 1→1 | Small knot on stem |
 
 ### Category: Decorative
-| Stitch | cols | rows | Shape Description |
-|--------|------|------|-------------------|
-| Shell | 5 | 3 | Fan/arc of 5 spokes |
-| Mini Shell | 3 | 2 | Fan of 3 spokes |
-| V-Stitch | 2 | 3 | V shape, open bottom |
-| Picot | 1 | 1 | Small loop on top |
-| Cluster | 3 | 3 | Inverted fan |
-| Pineapple | 5 | 6 | Elongated teardrop fan |
-| Granny Square | 6 | 6 | Square with corner clusters |
-| Suzette | 2 | 2 | Paired SC+ch |
-| Moss/Granite | 2 | 2 | SC+ch alternating |
+| Stitch | h | base→top | Shape |
+|--------|---|----------|-------|
+| Shell | 3 | 1→5 | 5 dc legs fanning from one base anchor |
+| Mini Shell | 2 | 1→3 | 3 hdc legs fanning from one base |
+| V-Stitch | 3 | 1→2 | 2 dc legs from one base, with visual gap |
+| Picot | 1 | 1→1 | Small loop decoration on top of leg |
+| Cluster (3-st) | 3 | 3→1 | 3 dc legs merging to one top (inverted fan) |
+| Suzette | 1 | 1→2 | sc + ch legs sharing base |
+| Moss/Granite | 1 | 1→1 | Alternating sc/ch pattern (renders with ch gap) |
+
+### Category: Shaping (increases / decreases)
+| Stitch | h | base→top | Shape |
+|--------|---|----------|-------|
+| SC Increase | 1 | 1→2 | 2 sc legs splaying outward from one base |
+| SC Decrease | 1 | 2→1 | 2 sc legs leaning inward to shared top — pulls base together |
+| Invisible Decrease | 1 | 2→1 | Same math, tighter visual merge |
+| HDC Increase | 2 | 1→2 | 2 hdc legs from one base |
+| HDC Decrease | 2 | 2→1 | 2 hdc legs to one top |
+| DC Increase | 3 | 1→2 | 2 dc legs from one base |
+| DC Decrease | 3 | 2→1 | 2 dc legs to one top |
+| TR Decrease | 4 | 2→1 | 2 tr legs to one top |
 
 ### Category: Specialty
-| Stitch | cols | rows | Shape Description |
-|--------|------|------|-------------------|
-| Spike Stitch | 1 | 3 | Downward pointing spike |
-| Crocodile Scale | 4 | 4 | Overlapping scale shape |
-| Broomstick Lace | 4 | 3 | Grouped loops on bar |
-| Hairpin Lace | 2 | 4 | Twisted ladder loops |
-| Tunisian Simple | 1 | 2 | Forward/return bar |
-| Tunisian Smock | 3 | 3 | Gathered pleat shape |
-| Bavarian | 6 | 6 | Layered square motif |
-| Star Stitch | 5 | 3 | 5-point gathered star |
-| Jasmine | 5 | 4 | Gathered petal cluster |
+| Stitch | h | base→top | Shape / Notes |
+|--------|---|----------|---------------|
+| Spike Stitch | 2–4 | 1→1 | Leg anchors into a row *below* current (special: stores target row offset) |
+| Crocodile Scale | 4 | 2→1 | Pair of stacked dc flipped downward; renders as overlapping scale |
+| Star Stitch | 3 | 5→1 | 5-loop gather to one top (multi-decrease variant) |
+| Jasmine | 4 | 1→5 | Gathered 5-petal cluster (shell variant with puff petals) |
+| Tunisian Simple | 2 | 1→1 | Forward/return bar; separate mode, same anchor math |
 
-### Category: Increases / Decreases
-| Stitch | cols | rows | Shape Description |
-|--------|------|------|-------------------|
-| SC Increase | 2 | 1 | Two X's sharing base |
-| SC Decrease | 1 | 1 | Two X's merging at top |
-| DC Increase | 2 | 3 | Two T's sharing base |
-| DC Decrease | 1 | 3 | Two T's merging at top |
-| Invisible Decrease | 1 | 1 | Slightly different X merge |
+### Motifs (not single stitches — preset row-groups)
+Granny Square, Pineapple, Bavarian, Broomstick Lace, Hairpin Lace, Waffle, Tunisian Smock — these are multi-row compositions, not single stitches. They're stored as named presets: a bundle of rows you stamp onto the grid, and each cell inside the preset is a normal anchor-modeled stitch. Defer to v2.
 
 ---
 
