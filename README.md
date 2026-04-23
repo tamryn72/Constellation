@@ -34,52 +34,79 @@ crochet-designer/
 
 ## Data Architecture
 
+### Core Concept: Anchors and Legs
+
+Every stitch is built from one or more **legs** — thick lines drawn between two **anchor points**. A leg's bottom connects to an anchor in the row below; its top exposes an anchor for the row above. This is the whole model:
+
+- **Basic stitch (sc, hdc, dc, tr...):** 1 leg, 1 bottom anchor → 1 top anchor. Height varies.
+- **Increase:** 2 legs sharing 1 bottom anchor → 2 top anchors. Legs splay outward.
+- **Decrease:** 2 legs sharing 1 top anchor ← 2 bottom anchors. Legs lean inward and pull the stitches below together (mathematically correct — the top anchor sits midway between the two base anchors).
+- **Shell:** 5 legs sharing 1 bottom anchor → 5 top anchors. Natural fan.
+- **Cluster:** N legs sharing 1 top anchor ← N bottom anchors. Inverted fan (multi-decrease).
+- **V-stitch:** 2 legs sharing 1 bottom anchor → 2 top anchors with a visual gap.
+- **Puff / bobble / popcorn:** 1 leg, 1 → 1, rendered with a bulge on the stem.
+- **Chain / slip stitch:** 1 leg, 1 → 1, very short.
+
+Layout math: each row is a sequence of stitches. Walking the row left to right, each stitch consumes `baseAnchors` anchors from the row below and emits `topAnchors` anchors upward. Row width (in anchor units) = sum of `topAnchors`. The row below must expose at least that many top anchors. Anchor x-positions are computed, not stored — which means decreases/increases naturally reshape row widths.
+
 ### Stitch Definition Object
 ```javascript
 {
-  id: "shell",
-  name: "Shell Stitch",
-  cols: 5,          // grid cells wide
-  rows: 3,          // grid cells tall
-  category: "decorative",
-  renderSVG: (color) => `<svg>...</svg>`,  // returns SVG string
-  description: "Fan of 5 dc worked into same stitch"
+  id: "dc_dec",
+  name: "DC Decrease (dc2tog)",
+  category: "shaping",
+  height: 3,                // in cells (vertical units)
+  baseAnchors: 2,           // anchors consumed from row below
+  topAnchors: 1,            // anchors exposed upward
+  // Renderer receives absolute pixel coords for its anchors + cellSize + color.
+  // It draws legs between them. The math (which bottom connects to which top)
+  // is the renderer's job and is what gives each stitch its visual identity.
+  renderSVG: ({ bottomAnchors, topAnchors, cellSize, color }) => `<svg>...</svg>`,
+  description: "Two DC legs merging into one top — pulls 2 stitches below together"
 }
 ```
 
 ### Placed Stitch Object (flat mode)
 ```javascript
+// Stored per-row, in order. No absolute x — position is computed from the row.
 {
-  id: "shell",
-  originCol: 3,     // top-left anchor col
-  originRow: 2,     // top-left anchor row
-  color: "#c084fc",
-  rotation: 0       // 0, 90, 180, 270
+  id: "dc_dec",
+  color: "#c084fc"
 }
 ```
 
 ### Grid State Object
 ```javascript
 {
-  mode: "flat",           // or "round"
-  cols: 40,
-  rows: 30,
-  cellSize: 24,           // px per cell
-  stitches: [],           // array of placed stitch objects
+  mode: "flat",                      // or "round"
+  cellSize: 24,                      // px per vertical/horizontal unit
+  rows: [                            // row 0 = foundation chain, row 1 = first worked row, ...
+    [ { id: "ch", color: "#000" }, /* ... */ ],
+    [ { id: "sc" }, { id: "sc_inc" }, { id: "sc" }, { id: "sc_dec" }, /* ... */ ]
+  ],
   selectedStitch: null,
   selectedColor: "#c084fc"
 }
 ```
 
+Row validity: a row is valid iff `sum(baseAnchors) of row N == sum(topAnchors) of row N-1`. The UI surfaces invalid rows (red underline on the row + count mismatch readout) but still renders what's there so the user can fix it live.
+
 ### Round Mode State
 ```javascript
 {
   mode: "round",
-  rings: 12,              // number of rounds
-  stitches: [],           // placed in ring/segment coords
-  centerStitch: "magic_ring"
+  cellSize: 24,
+  rounds: [                          // round 0 = magic ring / starting ring
+    [ { id: "magic_ring" } ],
+    [ { id: "sc_inc" }, { id: "sc_inc" }, /* ...6 incs = 12 top anchors */ ],
+    [ { id: "sc" }, { id: "sc_inc" }, /* ... */ ]
+  ],
+  selectedStitch: null,
+  selectedColor: "#c084fc"
 }
 ```
+
+Round layout is identical to flat, but anchor x becomes an angle. Round N's circumference is divided evenly by `sum(topAnchors)` of round N; each stitch's top anchors sit at their angular slice, radius = `(N+1) * cellSize`. Increases widen the circle; decreases pull it in.
 
 ---
 
