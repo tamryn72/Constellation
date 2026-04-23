@@ -198,6 +198,74 @@ export const STITCHES = {
     renderSVG(ctx) { return renderBasic({ ...ctx, crossbars: 3, hasHook: true }); }
   },
 
+  trtr: {
+    id: 'trtr', name: 'Triple Treble', category: 'Basic',
+    height: 6, baseAnchors: 1, topAnchors: 1,
+    description: 'Tallest basic stitch, 4 crossbars.',
+    renderSVG(ctx) { return renderBasic({ ...ctx, crossbars: 4, hasHook: true }); }
+  },
+
+  rsc: {
+    id: 'rsc', name: 'Reverse SC (crab)', category: 'Basic',
+    height: 1, baseAnchors: 1, topAnchors: 1,
+    description: 'Reverse single crochet / crab stitch — worked left-to-right for a twisted edge.',
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+      const sw = SW(cellSize);
+      // Wavy/twisted leg — a subtle s-curve plus a reversed-direction tick.
+      const mx = (b.x + t.x) / 2;
+      const my = (b.y + t.y) / 2;
+      const px = cellSize * 0.18;
+      const out = `<path d="M ${b.x} ${b.y} C ${b.x + px} ${(b.y+my)/2}, ${t.x - px} ${(t.y+my)/2}, ${t.x} ${t.y}"
+        stroke="${color}" stroke-width="${sw}" stroke-linecap="round" fill="none"/>`;
+      // little reverse arrow mark near top
+      const arr = `<path d="M ${t.x - cellSize*0.22} ${t.y + cellSize*0.22} l ${cellSize*0.18} ${-cellSize*0.12} m ${-cellSize*0.18} ${cellSize*0.12} l ${cellSize*0.05} ${cellSize*0.18}"
+        stroke="${color}" stroke-width="${sw*0.7}" stroke-linecap="round" fill="none"/>`;
+      return `<g>${out}${arr}</g>`;
+    }
+  },
+
+  spike: {
+    id: 'spike', name: 'Spike Stitch', category: 'Basic',
+    height: 2, baseAnchors: 1, topAnchors: 1,
+    description: 'Long sc worked down into a row below current — creates a vertical spike.',
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+      const sw = SW(cellSize);
+      // Extend the leg downward past the bottom anchor for the spike effect
+      const extB = { x: b.x, y: b.y + cellSize * 0.55 };
+      let out = `<line x1="${extB.x}" y1="${extB.y}" x2="${t.x}" y2="${t.y}"
+        stroke="${color}" stroke-width="${sw}" stroke-linecap="round"/>`;
+      // Pointed bottom mark
+      out += `<path d="M ${extB.x - cellSize*0.15} ${extB.y - cellSize*0.1} L ${extB.x} ${extB.y + cellSize*0.05} L ${extB.x + cellSize*0.15} ${extB.y - cellSize*0.1}"
+        stroke="${color}" stroke-width="${sw*0.85}" stroke-linecap="round" fill="none"/>`;
+      // Small X cap near top (shares sc identity)
+      out += xCap(t, b.x, b.y, cellSize, color, sw);
+      return `<g>${out}</g>`;
+    }
+  },
+
+  sc3tog: {
+    id: 'sc3tog', name: 'SC 3-together', category: 'Shaping',
+    height: 1, baseAnchors: 3, topAnchors: 1,
+    description: '3 sc legs merging to one top — pulls 3 stitches below together.',
+    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color }) {
+      const sw = SW(cellSize);
+      return `<g>${bottomAnchors.map(b =>
+        leg(b, t, color, sw) + xCap(t, b.x, b.y, cellSize, color, sw)
+      ).join('')}</g>`;
+    }
+  },
+
+  hdc3tog: {
+    id: 'hdc3tog', name: 'HDC 3-together', category: 'Shaping',
+    height: 2, baseAnchors: 3, topAnchors: 1,
+    description: '3 hdc legs merging to one top.',
+    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color }) {
+      const sw = SW(cellSize);
+      const legs = bottomAnchors.map(b => leg(b, t, color, sw)).join('');
+      return `<g>${legs}${topHook(t, bottomAnchors[1].x, bottomAnchors[1].y, cellSize, color, sw)}</g>`;
+    }
+  },
+
   // TEXTURED — 1 → 1, bulge on stem
   puff: {
     id: 'puff', name: 'Puff Stitch', category: 'Textured',
