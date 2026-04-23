@@ -93,64 +93,41 @@ function formatRowGroups(groups) {
   return formatGroups(groups);
 }
 
-export function generatePattern(state) {
-  const lines = [];
-  const title = '# Constellation Pattern';
-  lines.push(title);
-  lines.push(''.padEnd(title.length, '='));
-  lines.push('');
-
-  if (state.mode === 'flat') {
-    lines.push('## Flat pattern');
-    lines.push('');
-    if (!state.rows.length || !state.rows[0].length) {
+function writePanelBody(panel, lines) {
+  if (panel.mode === 'flat') {
+    if (!panel.rows.length || !panel.rows[0].length) {
       lines.push('(empty — add stitches to begin)');
-      return lines.join('\n');
+      return;
     }
-
-    // Foundation
-    const foundation = state.rows[0];
+    const foundation = panel.rows[0];
     const foundationCount = foundation.length;
     const allChain = foundation.every(p => p.id === 'ch');
     if (allChain) {
       lines.push(`Foundation: ch ${foundationCount}.`);
     } else {
-      lines.push(`Foundation: ${formatGroups(groupRow(foundation))}.  (${foundationCount} sts)`);
+      lines.push(`Foundation: ${formatRowGroups(groupRow(foundation))}.  (${foundationCount} sts)`);
     }
-
-    // Worked rows
-    for (let i = 1; i < state.rows.length; i++) {
-      const row = state.rows[i];
-      if (!row.length) {
-        lines.push(`Row ${i}: (empty)`);
-        continue;
-      }
+    for (let i = 1; i < panel.rows.length; i++) {
+      const row = panel.rows[i];
+      if (!row.length) { lines.push(`Row ${i}: (empty)`); continue; }
       const groups = groupRow(row);
       const produced = topCount(row);
       const consumed = baseCount(row);
-      const prevProduced = topCount(state.rows[i - 1]);
+      const prevProduced = topCount(panel.rows[i - 1]);
       const valid = consumed === prevProduced;
       const count = `(${produced} st${produced === 1 ? '' : 's'})`;
       const warn = valid ? '' : `  ⚠ uses ${consumed} of ${prevProduced} available`;
       lines.push(`Row ${i}: ${formatRowGroups(groups)}. ${count}${warn}`);
     }
   } else {
-    lines.push('## Round pattern');
-    lines.push('');
-    if (!state.rounds.length) {
-      lines.push('(empty)');
-      return lines.join('\n');
-    }
-    for (let i = 0; i < state.rounds.length; i++) {
-      const round = state.rounds[i];
-      if (!round.length) {
-        lines.push(`Rnd ${i}: (empty)`);
-        continue;
-      }
+    if (!panel.rounds.length) { lines.push('(empty)'); return; }
+    for (let i = 0; i < panel.rounds.length; i++) {
+      const round = panel.rounds[i];
+      if (!round.length) { lines.push(`Rnd ${i}: (empty)`); continue; }
       const groups = groupRow(round);
       const produced = topCount(round);
       const consumed = baseCount(round);
-      const prevProduced = i === 0 ? 0 : topCount(state.rounds[i - 1]);
+      const prevProduced = i === 0 ? 0 : topCount(panel.rounds[i - 1]);
       const valid = i === 0 ? true : consumed === prevProduced;
       const count = `(${produced} st${produced === 1 ? '' : 's'})`;
       const warn = valid ? '' : `  ⚠ uses ${consumed} of ${prevProduced} available`;
@@ -161,6 +138,56 @@ export function generatePattern(state) {
       }
     }
   }
+}
+
+function writeAssembly(state, lines) {
+  const panelsWithFolds = (state.panels ?? []).filter(p => (p.folds || []).length > 0);
+  const seams = state.seams || [];
+  if (!panelsWithFolds.length && !seams.length) return;
+
+  lines.push('');
+  lines.push('## Assembly');
+  lines.push('');
+
+  for (const p of panelsWithFolds) {
+    for (const f of p.folds) {
+      const where = f.axis === 'row'
+        ? `between Row ${f.at - 1} and Row ${f.at}`
+        : `at ${f.axis} ${f.at}`;
+      lines.push(`Fold ${p.name} ${where} (${f.label || 'fold'}).`);
+    }
+  }
+
+  for (const s of seams) {
+    const pa = state.panels.find(p => p.id === s.a?.panelId);
+    const pb = state.panels.find(p => p.id === s.b?.panelId);
+    if (!pa || !pb) continue;
+    const la = pa.edges?.[s.a.edge] ? ` "${pa.edges[s.a.edge]}"` : '';
+    const lb = pb.edges?.[s.b.edge] ? ` "${pb.edges[s.b.edge]}"` : '';
+    const note = s.note ? ` — ${s.note}` : '';
+    lines.push(`Sew ${pa.name} ${s.a.edge}${la} to ${pb.name} ${s.b.edge}${lb}${note}.`);
+  }
+}
+
+export function generatePattern(state) {
+  const lines = [];
+  const title = '# Constellation Pattern';
+  lines.push(title);
+  lines.push(''.padEnd(title.length, '='));
+  lines.push('');
+
+  const panels = state.panels ?? [];
+  const multi = panels.length > 1;
+
+  for (const p of panels) {
+    const modeLabel = p.mode === 'round' ? 'Round' : 'Flat';
+    lines.push(multi ? `## ${p.name} (${modeLabel.toLowerCase()})` : `## ${modeLabel} pattern`);
+    lines.push('');
+    writePanelBody(p, lines);
+    lines.push('');
+  }
+
+  writeAssembly(state, lines);
 
   lines.push('');
   lines.push('---');
