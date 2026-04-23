@@ -10,7 +10,7 @@
 //                 comes from center-bottom and stacks upward; inc/dec
 //                 pulls loops sideways because the top anchor moves.
 
-const SW = (cellSize) => cellSize * 0.18;   // stroke width scales with zoom
+const SW = (cellSize) => Math.max(1.2, cellSize * 0.12);   // stroke scales with zoom, with a floor for low-zoom readability
 
 // ---------- leg helpers ----------
 
