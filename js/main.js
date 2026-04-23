@@ -6,6 +6,7 @@ import * as radial from './radial.js';
 import { buildPalette } from './palette.js';
 import { createTools } from './tools.js';
 import { setupExport } from './export.js';
+import { showPatternModal } from './pattern.js';
 
 // ---------- initial state ----------
 
@@ -130,6 +131,10 @@ document.getElementById('tool-clear').addEventListener('click', () => tools.clea
 document.getElementById('tool-delete').addEventListener('click', () => tools.toggleDeleteMode());
 
 setupExport({ state, canvas });
+
+document.getElementById('tool-pattern').addEventListener('click', () => {
+  showPatternModal(state);
+});
 
 // ---------- first render ----------
 
