@@ -1,628 +1,492 @@
-// Stitch library. Every stitch is one or more thick "legs" drawn between
-// anchor points the grid engine has already computed. Renderers return a
-// <g> fragment in the grid's coordinate space.
+// Stitch library. Every stitch is an ICON — built from ovals, arcs, and
+// circles — placed in a grid cell and pulled toward its base/top anchors.
+// Ovals rotate along the leg direction so they lean with inc/dec naturally.
 
-const SW = (cellSize) => cellSize * 0.18;   // stroke width scales with zoom
+const SW = (cellSize) => Math.max(1.2, cellSize * 0.09);
 
-// ---------- leg helpers ----------
+// ---------- primitives ----------
 
-// Straight leg from bottom anchor b to top anchor t (thick, round caps).
-function leg(b, t, color, sw) {
-  return `<line x1="${b.x}" y1="${b.y}" x2="${t.x}" y2="${t.y}"
-    stroke="${color}" stroke-width="${sw}" stroke-linecap="round"/>`;
+// N ovals stacked along the leg from b to t. Each oval's long axis is
+// aligned with the leg direction, so if the leg leans, the ovals lean too.
+function stackedOvals(b, t, n, cellSize, color, { filled = false, rxFactor = 0.22, squeeze = 0.88 } = {}) {
+  const dx = t.x - b.x, dy = t.y - b.y;
+  const len = Math.hypot(dx, dy) || cellSize;
+  const legAngDeg = Math.atan2(dy, dx) * 180 / Math.PI + 90; // rotate so ellipse ry aligns with leg
+  const rx = cellSize * rxFactor;
+  const ry = (len / n) * 0.5 * squeeze;
+  const sw = SW(cellSize);
+  let out = '';
+  for (let i = 0; i < n; i++) {
+    const f = (i + 0.5) / n;
+    const cx = b.x + f * dx;
+    const cy = b.y + f * dy;
+    if (filled) {
+      out += `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}"
+        transform="rotate(${legAngDeg} ${cx} ${cy})" fill="${color}"/>`;
+    } else {
+      out += `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}"
+        transform="rotate(${legAngDeg} ${cx} ${cy})"
+        fill="none" stroke="${color}" stroke-width="${sw}" stroke-linejoin="round"/>`;
+    }
+  }
+  return out;
 }
 
-// Perpendicular crossbar centered on (cx, cy), aligned to the leg direction.
-function crossbar(cx, cy, bx, by, tx, ty, len, color, sw) {
-  // leg direction
-  let dx = tx - bx, dy = ty - by;
-  const n = Math.hypot(dx, dy) || 1;
-  dx /= n; dy /= n;
-  // perpendicular
-  const px = -dy, py = dx;
-  const half = len / 2;
-  return `<line x1="${cx - px*half}" y1="${cy - py*half}"
-                x2="${cx + px*half}" y2="${cy + py*half}"
-                stroke="${color}" stroke-width="${sw}" stroke-linecap="round"/>`;
+// One horizontal oval centered at p (used for chain at top of cell).
+function horizOval(p, cellSize, color, { rxFactor = 0.38, ryFactor = 0.16, filled = false } = {}) {
+  const rx = cellSize * rxFactor;
+  const ry = cellSize * ryFactor;
+  const sw = SW(cellSize);
+  const fill = filled ? color : 'none';
+  return `<ellipse cx="${p.x}" cy="${p.y}" rx="${rx}" ry="${ry}"
+    fill="${fill}" stroke="${color}" stroke-width="${sw}"/>`;
 }
 
-// Small hook arc at the top of the leg.
-function topHook(t, bx, by, cellSize, color, sw) {
-  let dx = t.x - bx, dy = t.y - by;
-  const n = Math.hypot(dx, dy) || 1;
-  dx /= n; dy /= n;
-  const px = -dy, py = dx;  // perpendicular, "outward" side
-  const r = cellSize * 0.22;
-  const hx = t.x + px * r;
-  const hy = t.y + py * r;
-  return `<path d="M ${t.x} ${t.y} q ${px*r*0.5 + dx*r*0.1} ${py*r*0.5 + dy*r*0.1}
-                        ${px*r + dx*r*0.3} ${py*r + dy*r*0.3}"
-           stroke="${color}" stroke-width="${sw}" stroke-linecap="round" fill="none"/>
-          <circle cx="${hx}" cy="${hy}" r="${sw*0.35}" fill="${color}"/>`;
-}
-
-// X cap near top of a leg (sc / slip style).
-function xCap(t, bx, by, cellSize, color, sw) {
-  let dx = t.x - bx, dy = t.y - by;
-  const n = Math.hypot(dx, dy) || 1;
-  dx /= n; dy /= n;
-  const px = -dy, py = dx;
-  const capOffset = cellSize * 0.18;
-  const capHalf = cellSize * 0.20;
-  const cx = t.x - dx * capOffset;
-  const cy = t.y - dy * capOffset;
-  // two diagonals through (cx, cy) relative to leg frame
-  const a = { x: cx - px*capHalf - dx*capHalf, y: cy - py*capHalf - dy*capHalf };
-  const b = { x: cx + px*capHalf + dx*capHalf, y: cy + py*capHalf + dy*capHalf };
-  const c = { x: cx - px*capHalf + dx*capHalf, y: cy - py*capHalf + dy*capHalf };
-  const d = { x: cx + px*capHalf - dx*capHalf, y: cy + py*capHalf - dy*capHalf };
-  return `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"
-            stroke="${color}" stroke-width="${sw*0.85}" stroke-linecap="round"/>
-          <line x1="${c.x}" y1="${c.y}" x2="${d.x}" y2="${d.y}"
-            stroke="${color}" stroke-width="${sw*0.85}" stroke-linecap="round"/>`;
-}
-
-// Bulge (for puff/bobble/popcorn) — ellipse centered on leg midpoint.
-function bulge(b, t, cellSize, color, kind) {
+// Round bump / ball (puff, popcorn, bobble).
+function bump(b, t, cellSize, color, style = 'puff') {
   const midX = (b.x + t.x) / 2;
   const midY = (b.y + t.y) / 2;
-  const rx = cellSize * (kind === 'popcorn' ? 0.36 : 0.28);
-  const ry = cellSize * (kind === 'bullion' ? 0.45 : 0.34);
-  const fillOp = kind === 'popcorn' ? 0.55 : kind === 'bobble' ? 0.45 : 0.30;
-  // rotate to leg direction
-  let dx = t.x - b.x, dy = t.y - b.y;
-  const ang = Math.atan2(dy, dx) * 180 / Math.PI - 90;
-  return `<ellipse cx="${midX}" cy="${midY}" rx="${rx}" ry="${ry}"
-            transform="rotate(${ang} ${midX} ${midY})"
-            fill="${color}" fill-opacity="${fillOp}"
-            stroke="${color}" stroke-width="${SW(cellSize)*0.8}"/>`;
-}
-
-// ---------- renderers ----------
-
-function renderBasic({ bottomAnchors, topAnchors, cellSize, color, crossbars = 0, hasHook = true, hasXCap = false }) {
-  const b = bottomAnchors[0];
-  const t = topAnchors[0];
+  const dx = t.x - b.x, dy = t.y - b.y;
+  const legLen = Math.hypot(dx, dy) || cellSize;
+  const ang = Math.atan2(dy, dx) * 180 / Math.PI + 90;
+  const rx = cellSize * 0.38;
+  const ry = legLen * 0.38;
   const sw = SW(cellSize);
-  let out = leg(b, t, color, sw);
-
-  // crossbars evenly spaced along the leg
-  for (let i = 0; i < crossbars; i++) {
-    const f = (i + 1) / (crossbars + 1);
-    const cx = b.x + (t.x - b.x) * f;
-    const cy = b.y + (t.y - b.y) * f;
-    out += crossbar(cx, cy, b.x, b.y, t.x, t.y, cellSize * 0.55, color, sw);
+  if (style === 'popcorn') {
+    // Round dome with a small filled dot in the middle
+    return `<ellipse cx="${midX}" cy="${midY}" rx="${rx}" ry="${ry}"
+        transform="rotate(${ang} ${midX} ${midY})"
+        fill="${color}" fill-opacity="0.18" stroke="${color}" stroke-width="${sw}"/>
+      <circle cx="${midX}" cy="${midY}" r="${cellSize*0.11}" fill="${color}"/>`;
   }
-  if (hasHook) out += topHook(t, b.x, b.y, cellSize, color, sw);
-  if (hasXCap) out += xCap(t, b.x, b.y, cellSize, color, sw);
-  return `<g>${out}</g>`;
-}
-
-// Chain-space factory. Renders N tiny chain links in an upward arc between
-// leftmost bottom anchor and rightmost top anchor — the standard lace glyph
-// for "ch N, skip N below". Consumes N bases, produces N tops.
-function makeChainSpace(N) {
-  return {
-    id: `ch_sp_${N}`, name: `ch-${N} space`, category: 'Lace',
-    height: 1, baseAnchors: N, topAnchors: N,
-    description: `Chain space of ${N}: ch ${N}, skip ${N} stitch${N === 1 ? '' : 'es'} below.`,
-    renderSVG({ bottomAnchors, topAnchors, cellSize, color }) {
-      const sw = SW(cellSize);
-      const bL = bottomAnchors[0];
-      const bR = bottomAnchors[bottomAnchors.length - 1];
-      const tL = topAnchors[0];
-      const tR = topAnchors[topAnchors.length - 1];
-      // Upward arch from mid-bottom to mid-top covering the span
-      const leftX  = Math.min(bL.x, tL.x);
-      const rightX = Math.max(bR.x, tR.x);
-      const midX = (leftX + rightX) / 2;
-      const topY = Math.min(tL.y, tR.y);
-      const bottomY = Math.max(bL.y, bR.y);
-      const archY = topY - cellSize * 0.05;
-      const arch = `<path d="M ${leftX} ${bottomY - cellSize*0.12}
-        Q ${midX} ${archY - cellSize*0.4} ${rightX} ${bottomY - cellSize*0.12}"
-        stroke="${color}" stroke-width="${sw*0.75}" stroke-linecap="round" fill="none"/>`;
-      // Chain beads along the arch
-      let beads = '';
-      for (let i = 0; i < N; i++) {
-        const t = N === 1 ? 0.5 : i / (N - 1);
-        const x = leftX + t * (rightX - leftX);
-        // Quadratic bezier: point at t on curve
-        const u = 1 - t;
-        const y = u*u*(bottomY - cellSize*0.12) + 2*u*t*(archY - cellSize*0.4) + t*t*(bottomY - cellSize*0.12);
-        beads += `<ellipse cx="${x}" cy="${y}" rx="${cellSize*0.15}" ry="${cellSize*0.2}"
-          transform="rotate(${-90 + (t-0.5)*60} ${x} ${y})"
-          fill="none" stroke="${color}" stroke-width="${sw*0.6}"/>`;
-      }
-      return `<g>${arch}${beads}</g>`;
+  if (style === 'bobble') {
+    // Three small stacked fat ovals
+    let out = '';
+    for (let i = 0; i < 3; i++) {
+      const f = 0.2 + 0.3 * i;
+      const cx = b.x + f * dx;
+      const cy = b.y + f * dy;
+      const r = cellSize * 0.18;
+      out += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" fill-opacity="${0.3 + i*0.1}"/>`;
     }
-  };
+    return out;
+  }
+  // puff/default: one fat filled oval along the leg
+  return `<ellipse cx="${midX}" cy="${midY}" rx="${rx}" ry="${ry}"
+    transform="rotate(${ang} ${midX} ${midY})"
+    fill="${color}" fill-opacity="0.30" stroke="${color}" stroke-width="${sw}"/>`;
 }
 
-// Post stitch: a leg that wraps around the post of the stitch below rather
-// than going into its top. front = bulge forward (toward viewer), back = away.
-// Crochet-chart convention: a little J hook at the bottom; front-post hooks
-// open right-downward, back-post left-downward.
-function renderPost({ bottomAnchors, topAnchors, cellSize, color, crossbars = 0, front = true }) {
-  const b = bottomAnchors[0];
-  const t = topAnchors[0];
-  const sw = SW(cellSize);
+// Short curved "J" at the base of a post stitch.
+function postHook(b, cellSize, color, front) {
   const side = front ? 1 : -1;
-  const r = cellSize * 0.32;
-  // J-hook at the base: quadratic curve from a point offset sideways,
-  // wrapping under "the post" back up to the stem.
-  const hx = b.x + side * r;
-  const hy = b.y + cellSize * 0.12;
-  const cx = b.x + side * r * 1.4;
-  const cy = b.y - cellSize * 0.05;
-  let out = `<path d="M ${hx} ${hy} Q ${cx} ${cy} ${b.x} ${b.y}"
+  const r = cellSize * 0.30;
+  const sw = SW(cellSize);
+  const startX = b.x + side * r;
+  const startY = b.y + cellSize * 0.14;
+  const ctrlX = b.x + side * r * 1.4;
+  const ctrlY = b.y - cellSize * 0.02;
+  return `<path d="M ${startX} ${startY} Q ${ctrlX} ${ctrlY} ${b.x} ${b.y - cellSize*0.04}"
     stroke="${color}" stroke-width="${sw}" stroke-linecap="round" fill="none"/>`;
-  out += leg(b, t, color, sw);
-  for (let i = 0; i < crossbars; i++) {
-    const f = (i + 1) / (crossbars + 1);
-    const mx = b.x + (t.x - b.x) * f;
-    const my = b.y + (t.y - b.y) * f;
-    out += crossbar(mx, my, b.x, b.y, t.x, t.y, cellSize * 0.55, color, sw);
-  }
-  out += topHook(t, b.x, b.y, cellSize, color, sw);
-  return `<g>${out}</g>`;
 }
 
 // ---------- stitch catalogue ----------
 
 export const STITCHES = {
 
-  // FOUNDATION
+  // --- FOUNDATION ---
   ch: {
     id: 'ch', name: 'Chain', category: 'Foundation',
     height: 1, baseAnchors: 1, topAnchors: 1,
-    description: 'A single chain link.',
-    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
-      const sw = SW(cellSize);
-      const cx = (b.x + t.x) / 2;
-      const cy = (b.y + t.y) / 2;
-      const rx = cellSize * 0.28;
-      const ry = cellSize * 0.38;
-      let dx = t.x - b.x, dy = t.y - b.y;
-      const ang = Math.atan2(dy, dx) * 180 / Math.PI - 90;
-      return `<g><ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}"
-        transform="rotate(${ang} ${cx} ${cy})"
-        fill="none" stroke="${color}" stroke-width="${sw}"/></g>`;
+    description: 'A chain — horizontal oval at the top of the cell.',
+    renderSVG({ topAnchors: [t], cellSize, color }) {
+      return `<g>${horizOval(t, cellSize, color, { rxFactor: 0.40, ryFactor: 0.18 })}</g>`;
     }
   },
 
   sl: {
     id: 'sl', name: 'Slip Stitch', category: 'Foundation',
     height: 1, baseAnchors: 1, topAnchors: 1,
-    description: 'Tiny filled bar.',
+    description: 'Slip stitch — tiny filled dot.',
     renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
-      const sw = SW(cellSize);
       const mx = (b.x + t.x) / 2, my = (b.y + t.y) / 2;
-      return `<g>${leg(b, t, color, sw)}
-        <circle cx="${mx}" cy="${my}" r="${cellSize*0.18}" fill="${color}"/></g>`;
+      return `<g><circle cx="${mx}" cy="${my}" r="${cellSize*0.16}" fill="${color}"/></g>`;
     }
   },
 
-  // BASIC — 1 → 1, varying height
+  magic_ring: {
+    id: 'magic_ring', name: 'Magic Ring', category: 'Foundation',
+    height: 1, baseAnchors: 0, topAnchors: 6,
+    description: 'Starting ring for round work.',
+    renderSVG({ topAnchors, cellSize, color }) {
+      const cx = topAnchors.reduce((s, a) => s + a.x, 0) / topAnchors.length;
+      const cy = topAnchors.reduce((s, a) => s + a.y, 0) / topAnchors.length;
+      const r = cellSize * 0.42;
+      const sw = SW(cellSize);
+      return `<g>
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="${sw}"/>
+        <circle cx="${cx}" cy="${cy}" r="${r*0.35}" fill="${color}" fill-opacity="0.25"/>
+      </g>`;
+    }
+  },
+
+  // --- BASIC --- (1→1, N ovals stacked along the leg, N = # of yarn-overs + 1)
   sc: {
     id: 'sc', name: 'Single Crochet', category: 'Basic',
     height: 1, baseAnchors: 1, topAnchors: 1,
-    description: 'Short leg with X cap.',
-    renderSVG(ctx) { return renderBasic({ ...ctx, crossbars: 0, hasHook: false, hasXCap: true }); }
+    description: '1 vertical oval.',
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+      return `<g>${stackedOvals(b, t, 1, cellSize, color)}</g>`;
+    }
   },
 
   hdc: {
     id: 'hdc', name: 'Half Double', category: 'Basic',
     height: 2, baseAnchors: 1, topAnchors: 1,
-    description: 'Medium leg, hook top.',
-    renderSVG(ctx) { return renderBasic({ ...ctx, crossbars: 0, hasHook: true }); }
+    description: '1 tall vertical oval.',
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+      return `<g>${stackedOvals(b, t, 1, cellSize, color)}</g>`;
+    }
   },
 
   dc: {
     id: 'dc', name: 'Double Crochet', category: 'Basic',
     height: 3, baseAnchors: 1, topAnchors: 1,
-    description: 'Tall leg, 1 crossbar, hook.',
-    renderSVG(ctx) { return renderBasic({ ...ctx, crossbars: 1, hasHook: true }); }
+    description: '2 vertical ovals stacked.',
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+      return `<g>${stackedOvals(b, t, 2, cellSize, color)}</g>`;
+    }
   },
 
   tr: {
     id: 'tr', name: 'Treble', category: 'Basic',
     height: 4, baseAnchors: 1, topAnchors: 1,
-    description: 'Very tall, 2 crossbars.',
-    renderSVG(ctx) { return renderBasic({ ...ctx, crossbars: 2, hasHook: true }); }
+    description: '3 vertical ovals stacked.',
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+      return `<g>${stackedOvals(b, t, 3, cellSize, color)}</g>`;
+    }
   },
 
   dtr: {
     id: 'dtr', name: 'Double Treble', category: 'Basic',
     height: 5, baseAnchors: 1, topAnchors: 1,
-    description: 'Extra tall, 3 crossbars.',
-    renderSVG(ctx) { return renderBasic({ ...ctx, crossbars: 3, hasHook: true }); }
+    description: '4 vertical ovals stacked.',
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+      return `<g>${stackedOvals(b, t, 4, cellSize, color)}</g>`;
+    }
   },
 
   trtr: {
     id: 'trtr', name: 'Triple Treble', category: 'Basic',
     height: 6, baseAnchors: 1, topAnchors: 1,
-    description: 'Tallest basic stitch, 4 crossbars.',
-    renderSVG(ctx) { return renderBasic({ ...ctx, crossbars: 4, hasHook: true }); }
+    description: '5 vertical ovals stacked.',
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+      return `<g>${stackedOvals(b, t, 5, cellSize, color)}</g>`;
+    }
   },
 
   rsc: {
     id: 'rsc', name: 'Reverse SC (crab)', category: 'Basic',
     height: 1, baseAnchors: 1, topAnchors: 1,
-    description: 'Reverse single crochet / crab stitch — worked left-to-right for a twisted edge.',
+    description: 'SC worked left-to-right — single oval with a twist tick.',
     renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
-      const sw = SW(cellSize);
-      // Wavy/twisted leg — a subtle s-curve plus a reversed-direction tick.
-      const mx = (b.x + t.x) / 2;
-      const my = (b.y + t.y) / 2;
-      const px = cellSize * 0.18;
-      const out = `<path d="M ${b.x} ${b.y} C ${b.x + px} ${(b.y+my)/2}, ${t.x - px} ${(t.y+my)/2}, ${t.x} ${t.y}"
-        stroke="${color}" stroke-width="${sw}" stroke-linecap="round" fill="none"/>`;
-      // little reverse arrow mark near top
-      const arr = `<path d="M ${t.x - cellSize*0.22} ${t.y + cellSize*0.22} l ${cellSize*0.18} ${-cellSize*0.12} m ${-cellSize*0.18} ${cellSize*0.12} l ${cellSize*0.05} ${cellSize*0.18}"
-        stroke="${color}" stroke-width="${sw*0.7}" stroke-linecap="round" fill="none"/>`;
-      return `<g>${out}${arr}</g>`;
+      const midX = (b.x + t.x) / 2, midY = (b.y + t.y) / 2;
+      return `<g>${stackedOvals(b, t, 1, cellSize, color)}
+        <path d="M ${midX - cellSize*0.22} ${midY + cellSize*0.05}
+                 q ${cellSize*0.22} ${-cellSize*0.12} ${cellSize*0.44} ${0}"
+          stroke="${color}" stroke-width="${SW(cellSize)*0.75}" fill="none" stroke-linecap="round"/>
+      </g>`;
     }
   },
 
   spike: {
     id: 'spike', name: 'Spike Stitch', category: 'Basic',
     height: 2, baseAnchors: 1, topAnchors: 1,
-    description: 'Long sc worked down into a row below current — creates a vertical spike.',
+    description: 'Long oval dropping below into lower row.',
     renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
-      const sw = SW(cellSize);
-      // Extend the leg downward past the bottom anchor for the spike effect
-      const extB = { x: b.x, y: b.y + cellSize * 0.55 };
-      let out = `<line x1="${extB.x}" y1="${extB.y}" x2="${t.x}" y2="${t.y}"
-        stroke="${color}" stroke-width="${sw}" stroke-linecap="round"/>`;
-      // Pointed bottom mark
-      out += `<path d="M ${extB.x - cellSize*0.15} ${extB.y - cellSize*0.1} L ${extB.x} ${extB.y + cellSize*0.05} L ${extB.x + cellSize*0.15} ${extB.y - cellSize*0.1}"
-        stroke="${color}" stroke-width="${sw*0.85}" stroke-linecap="round" fill="none"/>`;
-      // Small X cap near top (shares sc identity)
-      out += xCap(t, b.x, b.y, cellSize, color, sw);
-      return `<g>${out}</g>`;
+      // Extend below the bottom anchor for the spike effect
+      const extB = { x: b.x, y: b.y + cellSize * 0.6 };
+      return `<g>${stackedOvals(extB, t, 1, cellSize, color, { rxFactor: 0.18 })}
+        <path d="M ${extB.x - cellSize*0.16} ${extB.y - cellSize*0.12}
+                 L ${extB.x} ${extB.y + cellSize*0.06}
+                 L ${extB.x + cellSize*0.16} ${extB.y - cellSize*0.12}"
+          stroke="${color}" stroke-width="${SW(cellSize)*0.85}" fill="none" stroke-linecap="round"/>
+      </g>`;
     }
   },
 
-  sc3tog: {
-    id: 'sc3tog', name: 'SC 3-together', category: 'Shaping',
-    height: 1, baseAnchors: 3, topAnchors: 1,
-    description: '3 sc legs merging to one top — pulls 3 stitches below together.',
-    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color }) {
-      const sw = SW(cellSize);
-      return `<g>${bottomAnchors.map(b =>
-        leg(b, t, color, sw) + xCap(t, b.x, b.y, cellSize, color, sw)
-      ).join('')}</g>`;
+  // --- POST STITCHES --- leg comes through with a J-hook at base
+  fpsc: {
+    id: 'fpsc', name: 'Front Post SC', category: 'Post',
+    height: 1, baseAnchors: 1, topAnchors: 1,
+    description: 'SC around the post, from the front.',
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+      return `<g>${postHook(b, cellSize, color, true)}${stackedOvals(b, t, 1, cellSize, color)}</g>`;
+    }
+  },
+  bpsc: {
+    id: 'bpsc', name: 'Back Post SC', category: 'Post',
+    height: 1, baseAnchors: 1, topAnchors: 1,
+    description: 'SC around the post, from the back.',
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+      return `<g>${postHook(b, cellSize, color, false)}${stackedOvals(b, t, 1, cellSize, color)}</g>`;
+    }
+  },
+  fphdc: {
+    id: 'fphdc', name: 'Front Post HDC', category: 'Post',
+    height: 2, baseAnchors: 1, topAnchors: 1,
+    description: 'HDC around the post, from the front.',
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+      return `<g>${postHook(b, cellSize, color, true)}${stackedOvals(b, t, 1, cellSize, color)}</g>`;
+    }
+  },
+  bphdc: {
+    id: 'bphdc', name: 'Back Post HDC', category: 'Post',
+    height: 2, baseAnchors: 1, topAnchors: 1,
+    description: 'HDC around the post, from the back.',
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+      return `<g>${postHook(b, cellSize, color, false)}${stackedOvals(b, t, 1, cellSize, color)}</g>`;
+    }
+  },
+  fpdc: {
+    id: 'fpdc', name: 'Front Post DC', category: 'Post',
+    height: 3, baseAnchors: 1, topAnchors: 1,
+    description: 'DC around the post — raised (front).',
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+      return `<g>${postHook(b, cellSize, color, true)}${stackedOvals(b, t, 2, cellSize, color)}</g>`;
+    }
+  },
+  bpdc: {
+    id: 'bpdc', name: 'Back Post DC', category: 'Post',
+    height: 3, baseAnchors: 1, topAnchors: 1,
+    description: 'DC around the post — recessed (back).',
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+      return `<g>${postHook(b, cellSize, color, false)}${stackedOvals(b, t, 2, cellSize, color)}</g>`;
     }
   },
 
-  hdc3tog: {
-    id: 'hdc3tog', name: 'HDC 3-together', category: 'Shaping',
-    height: 2, baseAnchors: 3, topAnchors: 1,
-    description: '3 hdc legs merging to one top.',
-    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color }) {
-      const sw = SW(cellSize);
-      const legs = bottomAnchors.map(b => leg(b, t, color, sw)).join('');
-      return `<g>${legs}${topHook(t, bottomAnchors[1].x, bottomAnchors[1].y, cellSize, color, sw)}</g>`;
-    }
-  },
-
-  // TEXTURED — 1 → 1, bulge on stem
+  // --- TEXTURED --- bump / puff / popcorn / bobble / bullion
   puff: {
     id: 'puff', name: 'Puff Stitch', category: 'Textured',
     height: 2, baseAnchors: 1, topAnchors: 1,
-    description: 'Leg with oval puff.',
+    description: 'Fat puff bulge.',
     renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
-      return `<g>${leg(b, t, color, SW(cellSize))}${bulge(b, t, cellSize, color, 'puff')}</g>`;
+      return `<g>${bump(b, t, cellSize, color, 'puff')}</g>`;
     }
   },
-
   bobble: {
     id: 'bobble', name: 'Bobble', category: 'Textured',
     height: 2, baseAnchors: 1, topAnchors: 1,
-    description: 'Leg with rounded bump.',
+    description: 'Cluster of 3 small rounded bumps.',
     renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
-      return `<g>${leg(b, t, color, SW(cellSize))}${bulge(b, t, cellSize, color, 'bobble')}</g>`;
+      return `<g>${bump(b, t, cellSize, color, 'bobble')}</g>`;
     }
   },
-
   popcorn: {
     id: 'popcorn', name: 'Popcorn', category: 'Textured',
     height: 2, baseAnchors: 1, topAnchors: 1,
-    description: 'Leg with raised dome.',
+    description: 'Raised dome with a center dot.',
     renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
-      return `<g>${leg(b, t, color, SW(cellSize))}${bulge(b, t, cellSize, color, 'popcorn')}</g>`;
+      return `<g>${bump(b, t, cellSize, color, 'popcorn')}</g>`;
     }
   },
-
   bullion: {
     id: 'bullion', name: 'Bullion', category: 'Textured',
     height: 3, baseAnchors: 1, topAnchors: 1,
-    description: 'Elongated coiled stem.',
+    description: 'Elongated coiled stitch — many tight ovals.',
     renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
-      return `<g>${leg(b, t, color, SW(cellSize))}${bulge(b, t, cellSize, color, 'bullion')}</g>`;
+      return `<g>${stackedOvals(b, t, 6, cellSize, color, { rxFactor: 0.18 })}</g>`;
     }
   },
 
-  // SHAPING — these are the key cases for "pull stitches together"
+  // --- SHAPING ---
   sc_inc: {
     id: 'sc_inc', name: 'SC Increase', category: 'Shaping',
     height: 1, baseAnchors: 1, topAnchors: 2,
     description: '2 sc legs splaying from one base.',
     renderSVG({ bottomAnchors: [b], topAnchors, cellSize, color }) {
-      const sw = SW(cellSize);
-      return `<g>${topAnchors.map(t => leg(b, t, color, sw) + xCap(t, b.x, b.y, cellSize, color, sw)).join('')}</g>`;
+      return `<g>${topAnchors.map(t => stackedOvals(b, t, 1, cellSize, color)).join('')}</g>`;
     }
   },
-
   sc_dec: {
     id: 'sc_dec', name: 'SC Decrease', category: 'Shaping',
     height: 1, baseAnchors: 2, topAnchors: 1,
-    description: '2 sc legs merging into one top — pulls base together.',
+    description: '2 sc legs leaning inward — pulls the 2 below together.',
     renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color }) {
-      const sw = SW(cellSize);
-      return `<g>${bottomAnchors.map(b => leg(b, t, color, sw) + xCap(t, b.x, b.y, cellSize, color, sw)).join('')}</g>`;
+      return `<g>${bottomAnchors.map(b => stackedOvals(b, t, 1, cellSize, color)).join('')}</g>`;
     }
   },
-
   invdec: {
     id: 'invdec', name: 'Invisible Decrease', category: 'Shaping',
     height: 1, baseAnchors: 2, topAnchors: 1,
     description: 'Tighter merge variant.',
     renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color }) {
-      const sw = SW(cellSize);
-      const legs = bottomAnchors.map(b => leg(b, t, color, sw)).join('');
-      return `<g>${legs}<circle cx="${t.x}" cy="${t.y}" r="${cellSize*0.12}" fill="${color}"/></g>`;
+      return `<g>${bottomAnchors.map(b => stackedOvals(b, t, 1, cellSize, color, { rxFactor: 0.16 })).join('')}
+        <circle cx="${t.x}" cy="${t.y}" r="${cellSize*0.10}" fill="${color}"/></g>`;
     }
   },
-
   hdc_inc: {
     id: 'hdc_inc', name: 'HDC Increase', category: 'Shaping',
     height: 2, baseAnchors: 1, topAnchors: 2,
-    description: '2 hdc legs from one base.',
+    description: '2 hdc legs splaying from one base.',
     renderSVG({ bottomAnchors: [b], topAnchors, cellSize, color }) {
-      const sw = SW(cellSize);
-      return `<g>${topAnchors.map(t => leg(b, t, color, sw) + topHook(t, b.x, b.y, cellSize, color, sw)).join('')}</g>`;
+      return `<g>${topAnchors.map(t => stackedOvals(b, t, 1, cellSize, color)).join('')}</g>`;
     }
   },
-
   hdc_dec: {
     id: 'hdc_dec', name: 'HDC Decrease', category: 'Shaping',
     height: 2, baseAnchors: 2, topAnchors: 1,
     description: '2 hdc legs merging to one top.',
     renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color }) {
-      const sw = SW(cellSize);
-      const legs = bottomAnchors.map(b => leg(b, t, color, sw)).join('');
-      return `<g>${legs}${topHook(t, bottomAnchors[0].x, bottomAnchors[0].y, cellSize, color, sw)}</g>`;
+      return `<g>${bottomAnchors.map(b => stackedOvals(b, t, 1, cellSize, color)).join('')}</g>`;
     }
   },
-
   dc_inc: {
     id: 'dc_inc', name: 'DC Increase', category: 'Shaping',
     height: 3, baseAnchors: 1, topAnchors: 2,
-    description: '2 dc legs from one base.',
+    description: '2 dc legs splaying from one base.',
     renderSVG({ bottomAnchors: [b], topAnchors, cellSize, color }) {
-      const sw = SW(cellSize);
-      const parts = topAnchors.map(t => {
-        const mx = (b.x + t.x) / 2, my = (b.y + t.y) / 2;
-        return leg(b, t, color, sw)
-             + crossbar(mx, my, b.x, b.y, t.x, t.y, cellSize * 0.45, color, sw)
-             + topHook(t, b.x, b.y, cellSize, color, sw);
-      }).join('');
-      return `<g>${parts}</g>`;
+      return `<g>${topAnchors.map(t => stackedOvals(b, t, 2, cellSize, color)).join('')}</g>`;
     }
   },
-
   dc_dec: {
     id: 'dc_dec', name: 'DC Decrease', category: 'Shaping',
     height: 3, baseAnchors: 2, topAnchors: 1,
-    description: '2 dc legs merging into one top — pulls 2 stitches below together.',
+    description: '2 dc legs leaning inward — pulls 2 stitches below together.',
     renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color }) {
-      const sw = SW(cellSize);
-      const parts = bottomAnchors.map(b => {
-        const mx = (b.x + t.x) / 2, my = (b.y + t.y) / 2;
-        return leg(b, t, color, sw)
-             + crossbar(mx, my, b.x, b.y, t.x, t.y, cellSize * 0.45, color, sw);
-      }).join('');
-      return `<g>${parts}${topHook(t, bottomAnchors[0].x, bottomAnchors[0].y, cellSize, color, sw)}</g>`;
+      return `<g>${bottomAnchors.map(b => stackedOvals(b, t, 2, cellSize, color)).join('')}</g>`;
     }
   },
-
   tr_dec: {
     id: 'tr_dec', name: 'TR Decrease', category: 'Shaping',
     height: 4, baseAnchors: 2, topAnchors: 1,
-    description: '2 tr legs merging to one top.',
+    description: '2 tr legs leaning inward.',
     renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color }) {
-      const sw = SW(cellSize);
-      const parts = bottomAnchors.map(b => {
-        let out = leg(b, t, color, sw);
-        for (let i = 1; i <= 2; i++) {
-          const f = i / 3;
-          const cx = b.x + (t.x - b.x) * f;
-          const cy = b.y + (t.y - b.y) * f;
-          out += crossbar(cx, cy, b.x, b.y, t.x, t.y, cellSize * 0.4, color, sw);
-        }
-        return out;
-      }).join('');
-      return `<g>${parts}${topHook(t, bottomAnchors[0].x, bottomAnchors[0].y, cellSize, color, sw)}</g>`;
+      return `<g>${bottomAnchors.map(b => stackedOvals(b, t, 3, cellSize, color)).join('')}</g>`;
+    }
+  },
+  sc3tog: {
+    id: 'sc3tog', name: 'SC 3-together', category: 'Shaping',
+    height: 1, baseAnchors: 3, topAnchors: 1,
+    description: '3 sc legs merging to one top.',
+    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color }) {
+      return `<g>${bottomAnchors.map(b => stackedOvals(b, t, 1, cellSize, color)).join('')}</g>`;
+    }
+  },
+  hdc3tog: {
+    id: 'hdc3tog', name: 'HDC 3-together', category: 'Shaping',
+    height: 2, baseAnchors: 3, topAnchors: 1,
+    description: '3 hdc legs merging to one top.',
+    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color }) {
+      return `<g>${bottomAnchors.map(b => stackedOvals(b, t, 1, cellSize, color)).join('')}</g>`;
     }
   },
 
-  // POST STITCHES — leg wraps around the post of the stitch below rather
-  // than going into its top. Huge coverage for ribbing, cables, basketweave.
-  fpsc: {
-    id: 'fpsc', name: 'Front Post SC', category: 'Post',
-    height: 1, baseAnchors: 1, topAnchors: 1,
-    description: 'Worked around the post of the prev-row stitch from the front.',
-    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 0, front: true }); }
-  },
-  bpsc: {
-    id: 'bpsc', name: 'Back Post SC', category: 'Post',
-    height: 1, baseAnchors: 1, topAnchors: 1,
-    description: 'Worked around the post from the back.',
-    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 0, front: false }); }
-  },
-  fphdc: {
-    id: 'fphdc', name: 'Front Post HDC', category: 'Post',
-    height: 2, baseAnchors: 1, topAnchors: 1,
-    description: 'HDC around post from the front.',
-    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 0, front: true }); }
-  },
-  bphdc: {
-    id: 'bphdc', name: 'Back Post HDC', category: 'Post',
-    height: 2, baseAnchors: 1, topAnchors: 1,
-    description: 'HDC around post from the back.',
-    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 0, front: false }); }
-  },
-  fpdc: {
-    id: 'fpdc', name: 'Front Post DC', category: 'Post',
-    height: 3, baseAnchors: 1, topAnchors: 1,
-    description: 'DC around post from the front — raised stitch for ribbing/cables.',
-    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 1, front: true }); }
-  },
-  bpdc: {
-    id: 'bpdc', name: 'Back Post DC', category: 'Post',
-    height: 3, baseAnchors: 1, topAnchors: 1,
-    description: 'DC around post from the back — recessed stitch for ribbing/cables.',
-    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 1, front: false }); }
-  },
-
-  // DECORATIVE — fans and gathers
+  // --- DECORATIVE ---
   shell: {
     id: 'shell', name: 'Shell', category: 'Decorative',
     height: 3, baseAnchors: 1, topAnchors: 5,
-    description: '5 dc legs fanning from one base anchor.',
+    description: '5 dc legs fanning from one base — shares a base dot.',
     renderSVG({ bottomAnchors: [b], topAnchors, cellSize, color }) {
-      const sw = SW(cellSize);
-      const parts = topAnchors.map(t => {
-        const mx = (b.x + t.x) / 2, my = (b.y + t.y) / 2;
-        return leg(b, t, color, sw)
-             + crossbar(mx, my, b.x, b.y, t.x, t.y, cellSize * 0.3, color, sw);
-      }).join('');
-      return `<g>${parts}</g>`;
+      const fan = topAnchors.map(t => stackedOvals(b, t, 2, cellSize, color, { rxFactor: 0.17 })).join('');
+      return `<g>${fan}
+        <circle cx="${b.x}" cy="${b.y}" r="${cellSize*0.08}" fill="${color}"/></g>`;
     }
   },
-
   mini_shell: {
     id: 'mini_shell', name: 'Mini Shell', category: 'Decorative',
     height: 2, baseAnchors: 1, topAnchors: 3,
     description: '3 hdc legs fanning from one base.',
     renderSVG({ bottomAnchors: [b], topAnchors, cellSize, color }) {
-      const sw = SW(cellSize);
-      return `<g>${topAnchors.map(t => leg(b, t, color, sw)).join('')}</g>`;
+      const fan = topAnchors.map(t => stackedOvals(b, t, 1, cellSize, color, { rxFactor: 0.18 })).join('');
+      return `<g>${fan}
+        <circle cx="${b.x}" cy="${b.y}" r="${cellSize*0.07}" fill="${color}"/></g>`;
     }
   },
-
   v_stitch: {
     id: 'v_stitch', name: 'V-Stitch', category: 'Decorative',
     height: 3, baseAnchors: 1, topAnchors: 2,
     description: '2 dc legs from one base with a visible V gap.',
     renderSVG({ bottomAnchors: [b], topAnchors, cellSize, color }) {
-      const sw = SW(cellSize);
-      const parts = topAnchors.map(t => {
-        const mx = (b.x + t.x) / 2, my = (b.y + t.y) / 2;
-        return leg(b, t, color, sw)
-             + crossbar(mx, my, b.x, b.y, t.x, t.y, cellSize * 0.4, color, sw);
-      }).join('');
-      return `<g>${parts}</g>`;
+      return `<g>${topAnchors.map(t => stackedOvals(b, t, 2, cellSize, color)).join('')}
+        <circle cx="${b.x}" cy="${b.y}" r="${cellSize*0.07}" fill="${color}"/></g>`;
     }
   },
-
   cluster3: {
     id: 'cluster3', name: 'Cluster (3-st)', category: 'Decorative',
     height: 3, baseAnchors: 3, topAnchors: 1,
-    description: '3 dc legs merging to one top — inverted fan.',
+    description: '3 dc legs merging to one top — shares a top dot.',
     renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color }) {
-      const sw = SW(cellSize);
-      const parts = bottomAnchors.map(b => {
-        const mx = (b.x + t.x) / 2, my = (b.y + t.y) / 2;
-        return leg(b, t, color, sw)
-             + crossbar(mx, my, b.x, b.y, t.x, t.y, cellSize * 0.3, color, sw);
-      }).join('');
-      return `<g>${parts}</g>`;
+      return `<g>${bottomAnchors.map(b => stackedOvals(b, t, 2, cellSize, color, { rxFactor: 0.17 })).join('')}
+        <circle cx="${t.x}" cy="${t.y}" r="${cellSize*0.08}" fill="${color}"/></g>`;
     }
   },
-
   picot: {
     id: 'picot', name: 'Picot', category: 'Decorative',
     height: 1, baseAnchors: 1, topAnchors: 1,
-    description: 'Short leg with a decorative loop on top.',
+    description: 'Chain with a little loop on top.',
     renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
       const sw = SW(cellSize);
       const r = cellSize * 0.22;
-      return `<g>${leg(b, t, color, sw)}
-        <circle cx="${t.x}" cy="${t.y - r*0.4}" r="${r}" fill="none"
-          stroke="${color}" stroke-width="${sw}"/></g>`;
+      return `<g>${horizOval(t, cellSize, color, { rxFactor: 0.25, ryFactor: 0.12 })}
+        <circle cx="${t.x}" cy="${t.y - r*0.7}" r="${r*0.9}" fill="none" stroke="${color}" stroke-width="${sw*0.8}"/></g>`;
     }
   },
 
-  // LACE / FILET — chain-space presets. A ch-N spans N stitches below
-  // (skipped) and produces N tops above, rendered as a thin arch.
+  // --- LACE ---
   ch_sp_2: makeChainSpace(2),
   ch_sp_3: makeChainSpace(3),
   ch_sp_5: makeChainSpace(5),
-
-  // ROUND-MODE CENTER
-  magic_ring: {
-    id: 'magic_ring', name: 'Magic Ring', category: 'Foundation',
-    height: 1, baseAnchors: 0, topAnchors: 6,   // default; round mode lets user override
-    description: 'Starting ring — 0 base anchors, N top anchors (default 6).',
-    renderSVG({ topAnchors, cellSize, color }) {
-      // Draw at the centroid of the top anchors.
-      const cx = topAnchors.reduce((s, a) => s + a.x, 0) / topAnchors.length;
-      const cy = topAnchors.reduce((s, a) => s + a.y, 0) / topAnchors.length;
-      const r = cellSize * 0.45;
-      const sw = SW(cellSize);
-      const ticks = topAnchors.map(a => {
-        const dx = a.x - cx, dy = a.y - cy;
-        const n = Math.hypot(dx, dy) || 1;
-        const ux = dx/n, uy = dy/n;
-        return `<line x1="${cx + ux*r*0.6}" y1="${cy + uy*r*0.6}"
-                      x2="${cx + ux*r*1.05}" y2="${cy + uy*r*1.05}"
-                      stroke="${color}" stroke-width="${sw*0.8}" stroke-linecap="round"/>`;
-      }).join('');
-      return `<g><circle cx="${cx}" cy="${cy}" r="${r}" fill="none"
-        stroke="${color}" stroke-width="${sw}"/>${ticks}</g>`;
-    }
-  },
 };
+
+// Chain-space factory: N little horizontal ovals strung together.
+function makeChainSpace(N) {
+  return {
+    id: `ch_sp_${N}`, name: `ch-${N} space`, category: 'Lace',
+    height: 1, baseAnchors: N, topAnchors: N,
+    description: `Chain space: ch ${N}, skip ${N} below.`,
+    renderSVG({ bottomAnchors, topAnchors, cellSize, color }) {
+      const sw = SW(cellSize);
+      const tops = topAnchors.length ? topAnchors : bottomAnchors;
+      const beads = tops.map(t =>
+        `<ellipse cx="${t.x}" cy="${t.y}" rx="${cellSize*0.26}" ry="${cellSize*0.12}"
+          fill="none" stroke="${color}" stroke-width="${sw*0.7}"/>`
+      ).join('');
+      return `<g>${beads}</g>`;
+    }
+  };
+}
 
 // Category order for palette grouping
 export const CATEGORIES = ['Foundation', 'Basic', 'Shaping', 'Post', 'Textured', 'Decorative', 'Lace'];
 
-// Helper: render a stitch into a standalone <svg> for palette previews.
+// Standalone <svg> preview for palette thumbnails.
 export function renderPreview(stitchId, size = 48, color = '#c084fc') {
   const def = STITCHES[stitchId];
   if (!def) return '';
-  const cellSize = size / Math.max(def.height, 2);
+  // A generous cell size so even tall stitches fit without getting clipped
+  const cellSize = size / Math.max(def.height, 2) * 0.9;
   const pad = cellSize * 0.3;
-  const w = Math.max(
-    (def.topAnchors || 1),
-    (def.baseAnchors || 1)
-  ) * cellSize + pad * 2;
+  const widest = Math.max(def.topAnchors || 1, def.baseAnchors || 1, 1);
+  const w = widest * cellSize + pad * 2;
   const h = def.height * cellSize + pad * 2;
-
   const bottomY = h - pad;
-  const topY    = pad;
-  const baseN = def.baseAnchors || 1;
-  const topN  = def.topAnchors  || 1;
-  const bottomAnchors = [];
-  const topAnchors = [];
-  const widest = Math.max(baseN, topN, 1);
-  const spanW = (widest - 1) * cellSize;
-  const spanLeft = (w - spanW) / 2;
-  // Bottom anchors evenly spaced inside the footprint
-  for (let i = 0; i < baseN; i++) {
-    const t = baseN === 1 ? 0.5 : i / (baseN - 1);
-    bottomAnchors.push({ x: spanLeft + t * spanW, y: bottomY });
-  }
-  for (let i = 0; i < topN; i++) {
-    const t = topN === 1 ? 0.5 : i / (topN - 1);
-    topAnchors.push({ x: spanLeft + t * spanW, y: topY });
-  }
-  if (baseN === 0) {
-    // magic ring — fake bottom for rendering center
-  }
+  const topY = pad;
+  const spanLeft = pad + cellSize * 0.5;
+  const spanRight = w - pad - cellSize * 0.5;
+  const span = spanRight - spanLeft;
+
+  const mkAnchors = (n, y) => {
+    const out = [];
+    if (n <= 0) return out;
+    for (let i = 0; i < n; i++) {
+      const f = n === 1 ? 0.5 : i / (n - 1);
+      out.push({ x: spanLeft + f * span, y });
+    }
+    return out;
+  };
+  const bottomAnchors = def.baseAnchors === 0 ? [] : mkAnchors(def.baseAnchors, bottomY);
+  const topAnchors = mkAnchors(def.topAnchors, topY);
   const body = def.renderSVG({ bottomAnchors, topAnchors, cellSize, color });
   return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">${body}</svg>`;
 }
