@@ -2,6 +2,8 @@
 
 **A visual crochet pattern designer that looks like real crochet.**
 
+🧶 **Try it live:** https://tamryn72.github.io/Constellation/
+
 Constellation lets you build crochet patterns by clicking stitches onto a grid (flat) or a ring (round). Every stitch is drawn as the actual shape a crocheter would recognize — thick legs that lean, shells that fan, decreases that pull stitches together — because the layout is mathematically accurate, not just decorative.
 
 It runs entirely in your browser. No account, no install, no backend.
@@ -29,14 +31,14 @@ It runs entirely in your browser. No account, no install, no backend.
 
 ## Quick start
 
-You need a local web server because the app uses ES modules. Pick one:
+**Just use it:** open https://tamryn72.github.io/Constellation/ in any modern browser. Nothing to install, nothing to configure.
+
+**Run it locally** (for development / offline use):
 
 ```bash
-# Python (most systems have it)
-python3 -m http.server 8000
-
-# or Node
-npx serve
+git clone https://github.com/tamryn72/Constellation.git
+cd Constellation
+python3 -m http.server 8000   # or: npx serve
 ```
 
 Then open http://localhost:8000 in your browser.
