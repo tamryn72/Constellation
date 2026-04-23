@@ -79,7 +79,11 @@ export function createTools({ state, rerender, getSelectedStitch }) {
     if (!stitchId) return;
     const row = list()[activeRow];
     if (!row) return;
-    row.push({ id: stitchId, color: state.selectedColor });
+    const placed = { id: stitchId, color: state.selectedColor };
+    if (state.selectedLoop && state.selectedLoop !== 'both') {
+      placed.loop = state.selectedLoop;
+    }
+    row.push(placed);
     rerender();
   }
 

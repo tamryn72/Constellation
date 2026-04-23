@@ -176,6 +176,11 @@ body {
 .tool input[type="color"] {
   width: 28px; height: 28px; padding: 0; border: 0; background: transparent; cursor: pointer;
 }
+.tool select {
+  background: var(--bg-panel); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 3px 6px; font: inherit;
+}
 .toolbar-spacer { flex: 1; }
 .file-btn { position: relative; }
 

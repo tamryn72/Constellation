@@ -2,6 +2,7 @@
 // angles around a center and "row baseline y" becomes a radius.
 
 import { STITCHES } from './stitches.js';
+import { renderLoopMark } from './grid.js';
 
 const RING_GAP = 0.15;    // fraction of cellSize to leave between rings
 const PAD = 1.5;          // cell-units of padding around the outermost ring
@@ -255,6 +256,7 @@ export function render(canvas, state) {
         cellSize:      state.cellSize,
         color,
       });
+      const loopMark = renderLoopMark(s, state.cellSize, color);
       const xs = [...s.bottomAnchors, ...s.topAnchors].map(a => a.x);
       const ys = [...s.bottomAnchors, ...s.topAnchors].map(a => a.y);
       const xMin = Math.min(...xs) - state.cellSize * 0.25;
@@ -265,7 +267,7 @@ export function render(canvas, state) {
         <rect class="stitch-bg" x="${xMin}" y="${yMin}"
           width="${xMax - xMin}" height="${yMax - yMin}" rx="3"
           fill="transparent"/>
-        ${frag}
+        ${frag}${loopMark}
       </g>`;
     }
   }

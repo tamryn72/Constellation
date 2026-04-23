@@ -52,6 +52,7 @@ const state = {
   cellSize: 28,
   selectedColor: '#c084fc',
   fabricColor: '#faf7f2',
+  selectedLoop: 'both',          // 'both' | 'flo' | 'blo'
   panels: [demoPanel],
   activePanelIdx: 0,
   seams: [],          // { a:{panelId, edge}, b:{panelId, edge}, note }
@@ -168,6 +169,9 @@ document.getElementById('color').addEventListener('input', (e) => {
 document.getElementById('fabric-color').addEventListener('input', (e) => {
   state.fabricColor = e.target.value;
   rerender();
+});
+document.getElementById('loop-mode').addEventListener('change', (e) => {
+  state.selectedLoop = e.target.value;
 });
 document.getElementById('tool-add-row').addEventListener('click', () => tools.addRow());
 document.getElementById('tool-clear').addEventListener('click', () => tools.clearAll());

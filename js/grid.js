@@ -12,6 +12,24 @@ function escapeXml(s) {
   }[c]));
 }
 
+// Small half-moon mark under the bottom anchor indicating FLO/BLO.
+export function renderLoopMark(s, cellSize, color) {
+  const loop = s.placed?.loop;
+  if (!loop || loop === 'both') return '';
+  const b = s.bottomAnchors[0];
+  if (!b) return '';
+  const r = cellSize * 0.16;
+  const y = b.y + cellSize * 0.24;
+  // FLO → half-moon opens upward (drawn as top half filled); BLO → opposite.
+  if (loop === 'flo') {
+    return `<path d="M ${b.x - r} ${y} A ${r} ${r} 0 0 1 ${b.x + r} ${y} Z"
+      fill="${color}" opacity="0.85"/>`;
+  }
+  // BLO
+  return `<path d="M ${b.x - r} ${y} A ${r} ${r} 0 0 0 ${b.x + r} ${y} Z"
+    fill="none" stroke="${color}" stroke-width="${cellSize*0.08}"/>`;
+}
+
 // --- pure: layout ---
 
 // rows[0] is the foundation; rows[i>0] builds on rows[i-1]. Each stitch is
@@ -230,6 +248,7 @@ export function render(canvas, state) {
         cellSize:      state.cellSize,
         color,
       });
+      const loopMark = renderLoopMark(s, state.cellSize, color);
       // Bounding box hit target for delete/hover
       const xs = [...s.bottomAnchors, ...s.topAnchors].map(a => a.x);
       const ys = [...s.bottomAnchors, ...s.topAnchors].map(a => a.y);
@@ -241,7 +260,7 @@ export function render(canvas, state) {
         <rect class="stitch-bg" x="${xMin}" y="${yMin}"
           width="${xMax - xMin}" height="${yMax - yMin}" rx="3"
           fill="transparent"/>
-        ${frag}
+        ${frag}${loopMark}
       </g>`;
     }
   }

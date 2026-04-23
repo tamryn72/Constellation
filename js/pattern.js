@@ -50,15 +50,16 @@ function abbrev(id) {
   return ABBREV[id] || STITCHES[id]?.name || id;
 }
 
-// Collapse consecutive identical stitches into "N abbrev".
+// Collapse consecutive identical stitches (including loop flag) into "N abbrev".
 function groupRow(row) {
   const groups = [];
   for (const p of row) {
+    const loop = p.loop || 'both';
     const last = groups[groups.length - 1];
-    if (last && last.id === p.id) {
+    if (last && last.id === p.id && last.loop === loop) {
       last.count += 1;
     } else {
-      groups.push({ id: p.id, count: 1 });
+      groups.push({ id: p.id, loop, count: 1 });
     }
   }
   return groups;
@@ -76,8 +77,9 @@ function baseCount(row) {
 function formatGroups(groups) {
   return groups.map(g => {
     const a = abbrev(g.id);
-    if (g.count === 1) return a;
-    return `${g.count} ${a}`;
+    const suffix = g.loop === 'flo' ? ' FLO' : g.loop === 'blo' ? ' BLO' : '';
+    if (g.count === 1) return a + suffix;
+    return `${g.count} ${a}${suffix}`;
   }).join(', ');
 }
 
