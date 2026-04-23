@@ -9,6 +9,7 @@ import { setupExport } from './export.js';
 import { showPatternModal } from './pattern.js';
 import { buildPanelTabs } from './panels.js';
 import { showAssemblyModal } from './assembly.js';
+import { showPreviewModal } from './preview.js';
 
 // ---------- initial state ----------
 
@@ -192,6 +193,9 @@ document.getElementById('tool-pattern').addEventListener('click', () => {
 });
 document.getElementById('tool-assembly').addEventListener('click', () => {
   showAssemblyModal(state, () => rerender());
+});
+document.getElementById('tool-preview').addEventListener('click', () => {
+  showPreviewModal(state);
 });
 
 // ---------- panel tabs ----------

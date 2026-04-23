@@ -332,3 +332,13 @@ body.is-paint-mode .stitch:hover .stitch-bg { fill: rgba(240, 195, 92, 0.35); }
 }
 .seam-join { color: var(--fg-dim); text-align: center; }
 .empty-state { color: var(--fg-dim); font-style: italic; padding: 8px; }
+
+.preview-body {
+  padding: 16px;
+  overflow: auto;
+  background: var(--bg-panel);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.preview-body svg { max-width: 100%; height: auto; background: #1a1825; border-radius: 4px; }
