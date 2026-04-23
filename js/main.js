@@ -48,8 +48,11 @@ const demoPanel = makePanel({
   ],
 });
 
+const isNarrow = typeof window !== 'undefined'
+  && window.matchMedia?.('(max-width: 820px)').matches;
+
 const state = {
-  cellSize: 28,
+  cellSize: isNarrow ? 18 : 28,
   selectedColor: '#c084fc',
   fabricColor: '#faf7f2',
   selectedLoop: 'both',          // 'both' | 'flo' | 'blo'
@@ -155,6 +158,8 @@ document.getElementById('mode-round').addEventListener('click', () => setMode('r
 
 const zoomInput = document.getElementById('zoom');
 const zoomReadout = document.getElementById('zoom-readout');
+zoomInput.value = state.cellSize;
+zoomReadout.textContent = state.cellSize;
 zoomInput.addEventListener('input', () => {
   state.cellSize = Number(zoomInput.value);
   zoomReadout.textContent = state.cellSize;
