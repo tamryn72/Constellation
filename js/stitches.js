@@ -98,6 +98,35 @@ function renderBasic({ bottomAnchors, topAnchors, cellSize, color, crossbars = 0
   return `<g>${out}</g>`;
 }
 
+// Post stitch: a leg that wraps around the post of the stitch below rather
+// than going into its top. front = bulge forward (toward viewer), back = away.
+// Crochet-chart convention: a little J hook at the bottom; front-post hooks
+// open right-downward, back-post left-downward.
+function renderPost({ bottomAnchors, topAnchors, cellSize, color, crossbars = 0, front = true }) {
+  const b = bottomAnchors[0];
+  const t = topAnchors[0];
+  const sw = SW(cellSize);
+  const side = front ? 1 : -1;
+  const r = cellSize * 0.32;
+  // J-hook at the base: quadratic curve from a point offset sideways,
+  // wrapping under "the post" back up to the stem.
+  const hx = b.x + side * r;
+  const hy = b.y + cellSize * 0.12;
+  const cx = b.x + side * r * 1.4;
+  const cy = b.y - cellSize * 0.05;
+  let out = `<path d="M ${hx} ${hy} Q ${cx} ${cy} ${b.x} ${b.y}"
+    stroke="${color}" stroke-width="${sw}" stroke-linecap="round" fill="none"/>`;
+  out += leg(b, t, color, sw);
+  for (let i = 0; i < crossbars; i++) {
+    const f = (i + 1) / (crossbars + 1);
+    const mx = b.x + (t.x - b.x) * f;
+    const my = b.y + (t.y - b.y) * f;
+    out += crossbar(mx, my, b.x, b.y, t.x, t.y, cellSize * 0.55, color, sw);
+  }
+  out += topHook(t, b.x, b.y, cellSize, color, sw);
+  return `<g>${out}</g>`;
+}
+
 // ---------- stitch catalogue ----------
 
 export const STITCHES = {
@@ -310,6 +339,45 @@ export const STITCHES = {
     }
   },
 
+  // POST STITCHES — leg wraps around the post of the stitch below rather
+  // than going into its top. Huge coverage for ribbing, cables, basketweave.
+  fpsc: {
+    id: 'fpsc', name: 'Front Post SC', category: 'Post',
+    height: 1, baseAnchors: 1, topAnchors: 1,
+    description: 'Worked around the post of the prev-row stitch from the front.',
+    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 0, front: true }); }
+  },
+  bpsc: {
+    id: 'bpsc', name: 'Back Post SC', category: 'Post',
+    height: 1, baseAnchors: 1, topAnchors: 1,
+    description: 'Worked around the post from the back.',
+    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 0, front: false }); }
+  },
+  fphdc: {
+    id: 'fphdc', name: 'Front Post HDC', category: 'Post',
+    height: 2, baseAnchors: 1, topAnchors: 1,
+    description: 'HDC around post from the front.',
+    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 0, front: true }); }
+  },
+  bphdc: {
+    id: 'bphdc', name: 'Back Post HDC', category: 'Post',
+    height: 2, baseAnchors: 1, topAnchors: 1,
+    description: 'HDC around post from the back.',
+    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 0, front: false }); }
+  },
+  fpdc: {
+    id: 'fpdc', name: 'Front Post DC', category: 'Post',
+    height: 3, baseAnchors: 1, topAnchors: 1,
+    description: 'DC around post from the front — raised stitch for ribbing/cables.',
+    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 1, front: true }); }
+  },
+  bpdc: {
+    id: 'bpdc', name: 'Back Post DC', category: 'Post',
+    height: 3, baseAnchors: 1, topAnchors: 1,
+    description: 'DC around post from the back — recessed stitch for ribbing/cables.',
+    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 1, front: false }); }
+  },
+
   // DECORATIVE — fans and gathers
   shell: {
     id: 'shell', name: 'Shell', category: 'Decorative',
@@ -405,7 +473,7 @@ export const STITCHES = {
 };
 
 // Category order for palette grouping
-export const CATEGORIES = ['Foundation', 'Basic', 'Shaping', 'Textured', 'Decorative'];
+export const CATEGORIES = ['Foundation', 'Basic', 'Shaping', 'Post', 'Textured', 'Decorative', 'Lace'];
 
 // Helper: render a stitch into a standalone <svg> for palette previews.
 export function renderPreview(stitchId, size = 48, color = '#c084fc') {
