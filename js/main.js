@@ -27,9 +27,10 @@ const state = {
     ],
   ],
   rounds: [                      // round mode
-    [ { id: 'magic_ring' } ],
-    Array.from({ length: 6 }, () => ({ id: 'sc_inc' })),   // 6 incs → 12 tops
-    Array.from({ length: 12 }, () => ({ id: 'sc' })),
+    // Standard amigurumi increase pattern: 6, 12, 18 — each round lies flat.
+    [ { id: 'magic_ring' } ],                                             // → 6 tops
+    Array.from({ length: 6 }, () => ({ id: 'sc_inc' })),                  // 6 → 12 tops
+    Array.from({ length: 6 }, () => [{ id: 'sc' }, { id: 'sc_inc' }]).flat(), // 12 → 18 tops
   ],
 };
 
@@ -60,6 +61,21 @@ function rerender() {
     const where = w.row !== undefined ? `row ${w.row}` : `round ${w.round}`;
     parts.push(`⚠ ${where}: base=${w.consumed}, prev tops=${w.available} (Δ${w.delta})`);
   }
+
+  // Round-mode flat-lay hint: show the first off-target round.
+  if (state.mode === 'round' && laid.flatLay?.length) {
+    const bad = laid.flatLay.find(r => r.lie !== 'flat');
+    if (bad) {
+      const verb = bad.lie === 'cup' ? 'cups up' : 'ruffles';
+      const fix = bad.delta < 0
+        ? `add ${-bad.delta} increase${-bad.delta === 1 ? '' : 's'}`
+        : `remove ${bad.delta} stitch${bad.delta === 1 ? '' : 'es'}`;
+      parts.push(`↻ R${bad.round} ${verb}: ${bad.actual}/${bad.ideal} — ${fix} to lie flat`);
+    } else {
+      parts.push('↻ all rounds lie flat ✓');
+    }
+  }
+
   statusBar.textContent = parts.join(' · ');
 }
 

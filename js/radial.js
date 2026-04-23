@@ -6,6 +6,25 @@ import { STITCHES } from './stitches.js';
 const RING_GAP = 0.15;    // fraction of cellSize to leave between rings
 const PAD = 1.5;          // cell-units of padding around the outermost ring
 
+// Flat-lay tolerance. If actualCount / idealCount is in this band, the round
+// will lie flat. Outside → ruffles (too many) or cups (too few).
+const FLAT_TOLERANCE = 0.15;
+
+// Ideal stitch count for a round at outer radius r, so that each stitch
+// occupies one cellSize of arc: circumference / cellSize = 2π·r / cellSize.
+function idealStitchCount(outerR, cellSize) {
+  if (outerR <= 0) return 0;
+  return Math.round((2 * Math.PI * outerR) / cellSize);
+}
+
+function lieStatus(actual, ideal) {
+  if (ideal === 0) return 'flat';
+  const ratio = actual / ideal;
+  if (ratio > 1 + FLAT_TOLERANCE) return 'ruffle';
+  if (ratio < 1 - FLAT_TOLERANCE) return 'cup';
+  return 'flat';
+}
+
 // --- layout ---
 
 export function layout(state) {
@@ -53,11 +72,17 @@ export function layout(state) {
     prevTops.push(...topAngles);
   }
 
+  // Round 0 (magic ring) — circumference measurement applies at its OUTER radius
+  const centerActual = centerLaid.reduce((n, s) => n + (s.def.topAnchors ?? 1), 0);
+  const centerIdeal = idealStitchCount(radii[1], cellSize);
   const ringsLaid = [{
     stitches: centerLaid,
     innerR: radii[0],
     outerR: radii[1],
     valid: true,
+    actualCount: centerActual,
+    idealCount: centerIdeal,
+    lie: lieStatus(centerActual, centerIdeal),
   }];
 
   // --- Subsequent rounds ---
@@ -117,11 +142,29 @@ export function layout(state) {
 
       laid.push({ placed, def, bottomAnchors, topAnchors, angles: topAngles });
     }
-    ringsLaid.push({ stitches: laid, innerR, outerR: outerRingR, valid });
+    const idealCount = idealStitchCount(outerRingR, cellSize);
+    ringsLaid.push({
+      stitches: laid,
+      innerR,
+      outerR: outerRingR,
+      valid,
+      actualCount: totalTopN,
+      idealCount,
+      lie: lieStatus(totalTopN, idealCount),
+    });
     prevTops = thisTops;
   }
 
-  return { ringsLaid, size, cx, cy, outerR, warnings };
+  // Summary of flat-lay status for the UI.
+  const flatLay = ringsLaid.slice(1).map((r, i) => ({
+    round: i + 1,
+    actual: r.actualCount,
+    ideal: r.idealCount,
+    delta: r.actualCount - r.idealCount,
+    lie: r.lie,
+  }));
+
+  return { ringsLaid, size, cx, cy, outerR, warnings, flatLay };
 }
 
 // --- render ---
@@ -137,13 +180,42 @@ export function render(canvas, state) {
   // Background
   out += `<rect x="0" y="0" width="${laid.size}" height="${laid.size}" fill="#faf7f2"/>`;
 
-  // Concentric ring guides
+  // Concentric ring guides, color-coded by flat-lay status
+  const LIE_COLORS = { flat: '#2cb67d', cup: '#e0ac3a', ruffle: '#ef4444' };
+  const LIE_ICON   = { flat: '·',       cup: '▼',       ruffle: '▲'      };
+  const LIE_HINT   = {
+    flat: 'lies flat',
+    cup: 'too few → cups up',
+    ruffle: 'too many → ruffles'
+  };
+
   if (laid.ringsLaid) {
     for (let i = 0; i < laid.ringsLaid.length; i++) {
       const r = laid.ringsLaid[i];
-      out += `<circle class="grid-guide" cx="${laid.cx}" cy="${laid.cy}" r="${r.outerR}"
-        fill="none"/>`;
-      out += `<text class="row-label" x="${laid.cx + 4}" y="${laid.cy - r.outerR + 12}">R${i}${r.valid ? '' : ' ⚠'}</text>`;
+      const guideColor = r.idealCount === 0 ? '#d7cec7' : LIE_COLORS[r.lie];
+      const guideOp = r.lie === 'flat' ? 0.35 : 0.6;
+      out += `<circle cx="${laid.cx}" cy="${laid.cy}" r="${r.outerR}"
+        fill="none" stroke="${guideColor}" stroke-width="1.25" opacity="${guideOp}"/>`;
+
+      // Optional dashed "ideal circumference" ring for non-flat rounds
+      if (r.idealCount > 0 && r.lie !== 'flat') {
+        const idealR = r.actualCount > 0 ? (r.actualCount * state.cellSize) / (2 * Math.PI) : 0;
+        if (idealR > 0 && Math.abs(idealR - r.outerR) > 2) {
+          out += `<circle cx="${laid.cx}" cy="${laid.cy}" r="${idealR}"
+            fill="none" stroke="${LIE_COLORS[r.lie]}" stroke-width="1"
+            stroke-dasharray="3 4" opacity="0.55"/>`;
+        }
+      }
+
+      // Per-ring label: "R2  12/18 ▼ cups"
+      if (i > 0 && r.idealCount > 0) {
+        const delta = r.actualCount - r.idealCount;
+        const deltaStr = delta === 0 ? '' : (delta > 0 ? ` (+${delta})` : ` (${delta})`);
+        out += `<text class="row-label" x="${laid.cx + 6}" y="${laid.cy - r.outerR + 13}"
+          fill="${LIE_COLORS[r.lie]}">R${i} · ${r.actualCount}/${r.idealCount}${deltaStr} ${LIE_ICON[r.lie]}</text>`;
+      } else {
+        out += `<text class="row-label" x="${laid.cx + 6}" y="${laid.cy - r.outerR + 13}">R${i}${r.valid ? '' : ' ⚠'}</text>`;
+      }
     }
   }
 
