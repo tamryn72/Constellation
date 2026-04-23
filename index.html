@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Constellation — Crochet Pattern Designer</title>
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/palette.css">
+</head>
+<body>
+  <header id="app-header">
+    <h1>Constellation</h1>
+    <div class="mode-toggle" role="tablist" aria-label="Mode">
+      <button id="mode-flat"  class="mode-btn is-active" role="tab" aria-selected="true">Flat</button>
+      <button id="mode-round" class="mode-btn"           role="tab" aria-selected="false">Round</button>
+    </div>
+    <div class="header-spacer"></div>
+    <label class="zoom-control">
+      Zoom
+      <input id="zoom" type="range" min="12" max="64" value="28" step="1">
+      <span id="zoom-readout">28</span>px
+    </label>
+  </header>
+
+  <main id="app-main">
+    <aside id="palette" aria-label="Stitch palette">
+      <div class="palette-header">
+        <input id="palette-filter" type="search" placeholder="Filter stitches…" aria-label="Filter stitches">
+      </div>
+      <div id="palette-list" class="palette-list"></div>
+    </aside>
+
+    <section id="canvas-wrap">
+      <div id="panel-tabs" aria-label="Panels"></div>
+      <svg id="canvas" xmlns="http://www.w3.org/2000/svg" aria-label="Pattern canvas"></svg>
+      <div id="status-bar" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <footer id="toolbar">
+    <label class="tool" title="Current stitch color">
+      Yarn
+      <input id="color" type="color" value="#c084fc">
+    </label>
+    <label class="tool" title="Canvas / fabric background color">
+      Fabric
+      <input id="fabric-color" type="color" value="#faf7f2">
+    </label>
+    <label class="tool" title="Work next stitches through front loop only (FLO) or back loop only (BLO)">
+      Loop
+      <select id="loop-mode">
+        <option value="both">both</option>
+        <option value="flo">FLO</option>
+        <option value="blo">BLO</option>
+      </select>
+    </label>
+    <button id="tool-add-row"   class="tool-btn">+ New Row</button>
+    <button id="tool-fold"      class="tool-btn" title="Add a fold line above the active row">+ Fold</button>
+    <button id="tool-paint"     class="tool-btn" title="Click stitches to recolor">Paint</button>
+    <button id="tool-paint-row" class="tool-btn" title="Paint the active row/round with yarn color">Paint row</button>
+    <button id="tool-delete"    class="tool-btn" title="Toggle delete mode">Delete</button>
+    <button id="tool-clear"     class="tool-btn">Clear</button>
+    <span class="toolbar-spacer"></span>
+    <button id="tool-save"      class="tool-btn">Save JSON</button>
+    <label class="tool-btn file-btn">
+      Load JSON
+      <input id="tool-load" type="file" accept="application/json" hidden>
+    </label>
+    <button id="tool-png"       class="tool-btn">Export PNG</button>
+    <button id="tool-assembly"  class="tool-btn" title="Edge labels + seams (how panels join)">Assembly</button>
+    <button id="tool-preview"   class="tool-btn" title="Preview the finished project (all panels + seams)">Preview</button>
+    <button id="tool-pattern"   class="tool-btn">Pattern</button>
+  </footer>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
