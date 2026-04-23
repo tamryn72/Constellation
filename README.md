@@ -2,6 +2,8 @@
 
 **A visual crochet pattern designer that looks like real crochet.**
 
+STILL IN DEVELOPMENT!
+
 🧶 **Try it live:** https://tamryn72.github.io/Constellation/
 
 Constellation lets you build crochet patterns by clicking stitches onto a grid (flat) or a ring (round). Every stitch is drawn as the actual shape a crocheter would recognize — thick legs that lean, shells that fan, decreases that pull stitches together — because the layout is mathematically accurate, not just decorative.
