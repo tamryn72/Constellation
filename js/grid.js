@@ -257,6 +257,7 @@ export function render(canvas, state) {
         topAnchors:    s.topAnchors,
         cellSize:      state.cellSize,
         color,
+        style:         state.stitchStyle || 'realistic',
       });
       const loopMark = renderLoopMark(s, state.cellSize, color);
       // Bounding box hit target for delete/hover

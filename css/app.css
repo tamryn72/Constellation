@@ -129,8 +129,11 @@ body {
 .panel-tab-new:hover { color: var(--accent); border-color: var(--accent); }
 #canvas {
   display: block;
-  width: 100%;
-  height: 100%;
+  /* Size is driven by the width/height attributes set in grid.js (which are
+     cellSize × cell counts). The parent #canvas-wrap has overflow:auto, so
+     when the pattern grows past the viewport the canvas scrolls. Without
+     this, setting "width: 100%" would force the SVG to fill the container
+     and the viewBox would scale content to fit — making zoom a no-op. */
   min-height: 520px;
 }
 

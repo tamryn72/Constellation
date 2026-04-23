@@ -2,9 +2,10 @@
 
 import { STITCHES, CATEGORIES, renderPreview } from './stitches.js';
 
-export function buildPalette(root, onSelect) {
+export function buildPalette(root, onSelect, opts = {}) {
   const listEl   = root.querySelector('#palette-list');
   const filterEl = root.querySelector('#palette-filter');
+  const getStyle = opts.getStyle || (() => 'realistic');
 
   let filter = '';
   let selectedId = null;
@@ -28,7 +29,7 @@ export function buildPalette(root, onSelect) {
       if (!groups[cat]?.length) continue;
       html += `<div class="palette-category">${cat}</div>`;
       for (const def of groups[cat]) {
-        const preview = renderPreview(def.id, 48);
+        const preview = renderPreview(def.id, 48, '#c084fc', getStyle());
         const fp = `${def.baseAnchors}→${def.topAnchors} · h${def.height}`;
         html += `
           <div class="palette-item ${def.id === selectedId ? 'is-selected' : ''}"

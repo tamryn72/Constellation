@@ -1,6 +1,14 @@
 // Stitch library. Every stitch is one or more thick "legs" drawn between
 // anchor points the grid engine has already computed. Renderers return a
 // <g> fragment in the grid's coordinate space.
+//
+// Renderers accept a `style` option:
+//   'standard'  — traditional chart glyphs (leg + crossbars + hook/X cap)
+//   'realistic' — stacked yarn-loop ovals shaped like the actual stitch:
+//                 ch = horizontal oval at top; sc = 1 vertical loop;
+//                 dc = 2 loops; tr = 3; dtr = 4; trtr = 5. Each loop
+//                 comes from center-bottom and stacks upward; inc/dec
+//                 pulls loops sideways because the top anchor moves.
 
 const SW = (cellSize) => cellSize * 0.18;   // stroke width scales with zoom
 
@@ -78,12 +86,81 @@ function bulge(b, t, cellSize, color, kind) {
             stroke="${color}" stroke-width="${SW(cellSize)*0.8}"/>`;
 }
 
+// ---------- realistic-style helpers ----------
+
+// One vertical yarn-loop ellipse, oriented along the leg direction (b→t).
+// Represents one "pull-through" in the stitch.
+function loopOval(cx, cy, rx, ry, angleDeg, color, sw, fillOp) {
+  return `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}"
+    transform="rotate(${angleDeg} ${cx} ${cy})"
+    fill="${color}" fill-opacity="${fillOp}"
+    stroke="${color}" stroke-width="${sw}"
+    stroke-linejoin="round"/>`;
+}
+
+// Stack N loop-ovals along the leg from bottom anchor b to top anchor t.
+// Loops slightly overlap so they read as one continuous stitch. If the top
+// anchor is offset horizontally (increase/decrease), the whole stack tilts.
+function stackedLoops(b, t, n, cellSize, color, opts = {}) {
+  if (n <= 0) return '';
+  const dx = t.x - b.x;
+  const dy = t.y - b.y;
+  const len = Math.hypot(dx, dy) || 1;
+  // Ellipses are drawn with their long axis vertical (ry > rx), so the
+  // rotation needed to align to (dx,dy) is atan2(dy,dx) - 90°.
+  const angle = Math.atan2(dy, dx) * 180 / Math.PI - 90;
+
+  const widthFrac = opts.widthFrac ?? 0.26;    // loop width relative to cellSize
+  const overlap   = opts.overlap   ?? 0.22;    // 0 = touching, 0.25 = pleasant overlap
+  const rx = cellSize * widthFrac;
+  // Solve: n loops of height 2*ry overlapping by `overlap` share total len.
+  // len = 2*ry*n - 2*ry*overlap*(n-1)  ⇒  ry = len / (2 * (n - overlap*(n-1)))
+  const ry = len / (2 * (n - overlap * (n - 1)));
+  const step = 2 * ry * (1 - overlap);
+  const sw = SW(cellSize) * (opts.strokeScale ?? 0.85);
+  const fillOp = opts.fillOp ?? 0.18;
+
+  let out = '';
+  // Center of the lowest loop sits ry from the bottom anchor along the leg.
+  for (let i = 0; i < n; i++) {
+    const d = ry + i * step;
+    const cx = b.x + (dx / len) * d;
+    const cy = b.y + (dy / len) * d;
+    out += loopOval(cx, cy, rx, ry, angle, color, sw, fillOp);
+  }
+  return out;
+}
+
+// Horizontal chain-link oval centered at (cx, cy). Used for chain (top of cell)
+// and for chain-space beads.
+function chainOval(cx, cy, cellSize, color, opts = {}) {
+  const rx = cellSize * (opts.rx ?? 0.36);
+  const ry = cellSize * (opts.ry ?? 0.16);
+  const sw = SW(cellSize) * (opts.strokeScale ?? 0.85);
+  const fillOp = opts.fillOp ?? 0.18;
+  return `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}"
+    fill="${color}" fill-opacity="${fillOp}"
+    stroke="${color}" stroke-width="${sw}"/>`;
+}
+
+// How many yarn-loops a stitch has in realistic mode. Follows the convention
+// "(yarn-overs + 1) pull-throughs", which is why dc=2, tr=3, dtr=4, trtr=5.
+const LOOP_COUNT = {
+  sl: 1, sc: 1, hdc: 1,
+  dc: 2, tr: 3, dtr: 4, trtr: 5,
+};
+
 // ---------- renderers ----------
 
-function renderBasic({ bottomAnchors, topAnchors, cellSize, color, crossbars = 0, hasHook = true, hasXCap = false }) {
+function renderBasic({ bottomAnchors, topAnchors, cellSize, color, style, crossbars = 0, hasHook = true, hasXCap = false, loopCount = 1 }) {
   const b = bottomAnchors[0];
   const t = topAnchors[0];
   const sw = SW(cellSize);
+
+  if (style === 'realistic') {
+    return `<g>${stackedLoops(b, t, loopCount, cellSize, color)}</g>`;
+  }
+
   let out = leg(b, t, color, sw);
 
   // crossbars evenly spaced along the leg
@@ -106,7 +183,7 @@ function makeChainSpace(N) {
     id: `ch_sp_${N}`, name: `ch-${N} space`, category: 'Lace',
     height: 1, baseAnchors: N, topAnchors: N,
     description: `Chain space of ${N}: ch ${N}, skip ${N} stitch${N === 1 ? '' : 'es'} below.`,
-    renderSVG({ bottomAnchors, topAnchors, cellSize, color }) {
+    renderSVG({ bottomAnchors, topAnchors, cellSize, color, style }) {
       const sw = SW(cellSize);
       const bL = bottomAnchors[0];
       const bR = bottomAnchors[bottomAnchors.length - 1];
@@ -122,17 +199,20 @@ function makeChainSpace(N) {
       const arch = `<path d="M ${leftX} ${bottomY - cellSize*0.12}
         Q ${midX} ${archY - cellSize*0.4} ${rightX} ${bottomY - cellSize*0.12}"
         stroke="${color}" stroke-width="${sw*0.75}" stroke-linecap="round" fill="none"/>`;
-      // Chain beads along the arch
+      // Chain beads along the arch — horizontal ovals in realistic mode.
       let beads = '';
       for (let i = 0; i < N; i++) {
         const t = N === 1 ? 0.5 : i / (N - 1);
         const x = leftX + t * (rightX - leftX);
-        // Quadratic bezier: point at t on curve
         const u = 1 - t;
         const y = u*u*(bottomY - cellSize*0.12) + 2*u*t*(archY - cellSize*0.4) + t*t*(bottomY - cellSize*0.12);
-        beads += `<ellipse cx="${x}" cy="${y}" rx="${cellSize*0.15}" ry="${cellSize*0.2}"
-          transform="rotate(${-90 + (t-0.5)*60} ${x} ${y})"
-          fill="none" stroke="${color}" stroke-width="${sw*0.6}"/>`;
+        if (style === 'realistic') {
+          beads += chainOval(x, y, cellSize, color, { rx: 0.22, ry: 0.11 });
+        } else {
+          beads += `<ellipse cx="${x}" cy="${y}" rx="${cellSize*0.15}" ry="${cellSize*0.2}"
+            transform="rotate(${-90 + (t-0.5)*60} ${x} ${y})"
+            fill="none" stroke="${color}" stroke-width="${sw*0.6}"/>`;
+        }
       }
       return `<g>${arch}${beads}</g>`;
     }
@@ -143,20 +223,26 @@ function makeChainSpace(N) {
 // than going into its top. front = bulge forward (toward viewer), back = away.
 // Crochet-chart convention: a little J hook at the bottom; front-post hooks
 // open right-downward, back-post left-downward.
-function renderPost({ bottomAnchors, topAnchors, cellSize, color, crossbars = 0, front = true }) {
+function renderPost({ bottomAnchors, topAnchors, cellSize, color, style, crossbars = 0, loopCount = 1, front = true }) {
   const b = bottomAnchors[0];
   const t = topAnchors[0];
   const sw = SW(cellSize);
   const side = front ? 1 : -1;
   const r = cellSize * 0.32;
-  // J-hook at the base: quadratic curve from a point offset sideways,
-  // wrapping under "the post" back up to the stem.
+  // J-hook at the base, kept in both styles so post vs. non-post reads at a
+  // glance. front-post hook opens right; back-post opens left.
   const hx = b.x + side * r;
   const hy = b.y + cellSize * 0.12;
   const cx = b.x + side * r * 1.4;
   const cy = b.y - cellSize * 0.05;
   let out = `<path d="M ${hx} ${hy} Q ${cx} ${cy} ${b.x} ${b.y}"
     stroke="${color}" stroke-width="${sw}" stroke-linecap="round" fill="none"/>`;
+
+  if (style === 'realistic') {
+    out += stackedLoops(b, t, loopCount, cellSize, color);
+    return `<g>${out}</g>`;
+  }
+
   out += leg(b, t, color, sw);
   for (let i = 0; i < crossbars; i++) {
     const f = (i + 1) / (crossbars + 1);
@@ -177,8 +263,14 @@ export const STITCHES = {
     id: 'ch', name: 'Chain', category: 'Foundation',
     height: 1, baseAnchors: 1, topAnchors: 1,
     description: 'A single chain link.',
-    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color, style }) {
       const sw = SW(cellSize);
+      if (style === 'realistic') {
+        // Horizontal oval sitting at the TOP of the cell.
+        const cx = t.x;
+        const cy = t.y + cellSize * 0.12;
+        return `<g>${chainOval(cx, cy, cellSize, color)}</g>`;
+      }
       const cx = (b.x + t.x) / 2;
       const cy = (b.y + t.y) / 2;
       const rx = cellSize * 0.28;
@@ -195,8 +287,12 @@ export const STITCHES = {
     id: 'sl', name: 'Slip Stitch', category: 'Foundation',
     height: 1, baseAnchors: 1, topAnchors: 1,
     description: 'Tiny filled bar.',
-    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color, style }) {
       const sw = SW(cellSize);
+      if (style === 'realistic') {
+        // Tight little loop — one small oval, more squashed than sc.
+        return `<g>${stackedLoops(b, t, 1, cellSize, color, { widthFrac: 0.20, fillOp: 0.35 })}</g>`;
+      }
       const mx = (b.x + t.x) / 2, my = (b.y + t.y) / 2;
       return `<g>${leg(b, t, color, sw)}
         <circle cx="${mx}" cy="${my}" r="${cellSize*0.18}" fill="${color}"/></g>`;
@@ -208,42 +304,42 @@ export const STITCHES = {
     id: 'sc', name: 'Single Crochet', category: 'Basic',
     height: 1, baseAnchors: 1, topAnchors: 1,
     description: 'Short leg with X cap.',
-    renderSVG(ctx) { return renderBasic({ ...ctx, crossbars: 0, hasHook: false, hasXCap: true }); }
+    renderSVG(ctx) { return renderBasic({ ...ctx, crossbars: 0, hasHook: false, hasXCap: true, loopCount: LOOP_COUNT.sc }); }
   },
 
   hdc: {
     id: 'hdc', name: 'Half Double', category: 'Basic',
     height: 2, baseAnchors: 1, topAnchors: 1,
     description: 'Medium leg, hook top.',
-    renderSVG(ctx) { return renderBasic({ ...ctx, crossbars: 0, hasHook: true }); }
+    renderSVG(ctx) { return renderBasic({ ...ctx, crossbars: 0, hasHook: true, loopCount: LOOP_COUNT.hdc }); }
   },
 
   dc: {
     id: 'dc', name: 'Double Crochet', category: 'Basic',
     height: 3, baseAnchors: 1, topAnchors: 1,
     description: 'Tall leg, 1 crossbar, hook.',
-    renderSVG(ctx) { return renderBasic({ ...ctx, crossbars: 1, hasHook: true }); }
+    renderSVG(ctx) { return renderBasic({ ...ctx, crossbars: 1, hasHook: true, loopCount: LOOP_COUNT.dc }); }
   },
 
   tr: {
     id: 'tr', name: 'Treble', category: 'Basic',
     height: 4, baseAnchors: 1, topAnchors: 1,
     description: 'Very tall, 2 crossbars.',
-    renderSVG(ctx) { return renderBasic({ ...ctx, crossbars: 2, hasHook: true }); }
+    renderSVG(ctx) { return renderBasic({ ...ctx, crossbars: 2, hasHook: true, loopCount: LOOP_COUNT.tr }); }
   },
 
   dtr: {
     id: 'dtr', name: 'Double Treble', category: 'Basic',
     height: 5, baseAnchors: 1, topAnchors: 1,
     description: 'Extra tall, 3 crossbars.',
-    renderSVG(ctx) { return renderBasic({ ...ctx, crossbars: 3, hasHook: true }); }
+    renderSVG(ctx) { return renderBasic({ ...ctx, crossbars: 3, hasHook: true, loopCount: LOOP_COUNT.dtr }); }
   },
 
   trtr: {
     id: 'trtr', name: 'Triple Treble', category: 'Basic',
     height: 6, baseAnchors: 1, topAnchors: 1,
     description: 'Tallest basic stitch, 4 crossbars.',
-    renderSVG(ctx) { return renderBasic({ ...ctx, crossbars: 4, hasHook: true }); }
+    renderSVG(ctx) { return renderBasic({ ...ctx, crossbars: 4, hasHook: true, loopCount: LOOP_COUNT.trtr }); }
   },
 
   rsc: {
@@ -288,8 +384,13 @@ export const STITCHES = {
     id: 'sc3tog', name: 'SC 3-together', category: 'Shaping',
     height: 1, baseAnchors: 3, topAnchors: 1,
     description: '3 sc legs merging to one top — pulls 3 stitches below together.',
-    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color }) {
+    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color, style }) {
       const sw = SW(cellSize);
+      if (style === 'realistic') {
+        return `<g>${bottomAnchors.map(b =>
+          stackedLoops(b, t, LOOP_COUNT.sc, cellSize, color)
+        ).join('')}</g>`;
+      }
       return `<g>${bottomAnchors.map(b =>
         leg(b, t, color, sw) + xCap(t, b.x, b.y, cellSize, color, sw)
       ).join('')}</g>`;
@@ -300,8 +401,13 @@ export const STITCHES = {
     id: 'hdc3tog', name: 'HDC 3-together', category: 'Shaping',
     height: 2, baseAnchors: 3, topAnchors: 1,
     description: '3 hdc legs merging to one top.',
-    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color }) {
+    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color, style }) {
       const sw = SW(cellSize);
+      if (style === 'realistic') {
+        return `<g>${bottomAnchors.map(b =>
+          stackedLoops(b, t, LOOP_COUNT.hdc, cellSize, color)
+        ).join('')}</g>`;
+      }
       const legs = bottomAnchors.map(b => leg(b, t, color, sw)).join('');
       return `<g>${legs}${topHook(t, bottomAnchors[1].x, bottomAnchors[1].y, cellSize, color, sw)}</g>`;
     }
@@ -312,7 +418,11 @@ export const STITCHES = {
     id: 'puff', name: 'Puff Stitch', category: 'Textured',
     height: 2, baseAnchors: 1, topAnchors: 1,
     description: 'Leg with oval puff.',
-    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color, style }) {
+      if (style === 'realistic') {
+        // Three fat, fully-overlapped loops read as a puff.
+        return `<g>${stackedLoops(b, t, 3, cellSize, color, { widthFrac: 0.32, overlap: 0.55, fillOp: 0.28 })}</g>`;
+      }
       return `<g>${leg(b, t, color, SW(cellSize))}${bulge(b, t, cellSize, color, 'puff')}</g>`;
     }
   },
@@ -321,7 +431,10 @@ export const STITCHES = {
     id: 'bobble', name: 'Bobble', category: 'Textured',
     height: 2, baseAnchors: 1, topAnchors: 1,
     description: 'Leg with rounded bump.',
-    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color, style }) {
+      if (style === 'realistic') {
+        return `<g>${stackedLoops(b, t, 4, cellSize, color, { widthFrac: 0.30, overlap: 0.6, fillOp: 0.35 })}</g>`;
+      }
       return `<g>${leg(b, t, color, SW(cellSize))}${bulge(b, t, cellSize, color, 'bobble')}</g>`;
     }
   },
@@ -330,7 +443,10 @@ export const STITCHES = {
     id: 'popcorn', name: 'Popcorn', category: 'Textured',
     height: 2, baseAnchors: 1, topAnchors: 1,
     description: 'Leg with raised dome.',
-    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color, style }) {
+      if (style === 'realistic') {
+        return `<g>${stackedLoops(b, t, 5, cellSize, color, { widthFrac: 0.34, overlap: 0.65, fillOp: 0.45 })}</g>`;
+      }
       return `<g>${leg(b, t, color, SW(cellSize))}${bulge(b, t, cellSize, color, 'popcorn')}</g>`;
     }
   },
@@ -339,7 +455,11 @@ export const STITCHES = {
     id: 'bullion', name: 'Bullion', category: 'Textured',
     height: 3, baseAnchors: 1, topAnchors: 1,
     description: 'Elongated coiled stem.',
-    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color, style }) {
+      if (style === 'realistic') {
+        // Many tight coils up the leg.
+        return `<g>${stackedLoops(b, t, 7, cellSize, color, { widthFrac: 0.22, overlap: 0.4, fillOp: 0.2 })}</g>`;
+      }
       return `<g>${leg(b, t, color, SW(cellSize))}${bulge(b, t, cellSize, color, 'bullion')}</g>`;
     }
   },
@@ -349,8 +469,11 @@ export const STITCHES = {
     id: 'sc_inc', name: 'SC Increase', category: 'Shaping',
     height: 1, baseAnchors: 1, topAnchors: 2,
     description: '2 sc legs splaying from one base.',
-    renderSVG({ bottomAnchors: [b], topAnchors, cellSize, color }) {
+    renderSVG({ bottomAnchors: [b], topAnchors, cellSize, color, style }) {
       const sw = SW(cellSize);
+      if (style === 'realistic') {
+        return `<g>${topAnchors.map(t => stackedLoops(b, t, LOOP_COUNT.sc, cellSize, color)).join('')}</g>`;
+      }
       return `<g>${topAnchors.map(t => leg(b, t, color, sw) + xCap(t, b.x, b.y, cellSize, color, sw)).join('')}</g>`;
     }
   },
@@ -359,8 +482,11 @@ export const STITCHES = {
     id: 'sc_dec', name: 'SC Decrease', category: 'Shaping',
     height: 1, baseAnchors: 2, topAnchors: 1,
     description: '2 sc legs merging into one top — pulls base together.',
-    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color }) {
+    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color, style }) {
       const sw = SW(cellSize);
+      if (style === 'realistic') {
+        return `<g>${bottomAnchors.map(b => stackedLoops(b, t, LOOP_COUNT.sc, cellSize, color)).join('')}</g>`;
+      }
       return `<g>${bottomAnchors.map(b => leg(b, t, color, sw) + xCap(t, b.x, b.y, cellSize, color, sw)).join('')}</g>`;
     }
   },
@@ -369,8 +495,14 @@ export const STITCHES = {
     id: 'invdec', name: 'Invisible Decrease', category: 'Shaping',
     height: 1, baseAnchors: 2, topAnchors: 1,
     description: 'Tighter merge variant.',
-    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color }) {
+    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color, style }) {
       const sw = SW(cellSize);
+      if (style === 'realistic') {
+        // Slimmer loops so the merge reads as tighter than sc_dec.
+        return `<g>${bottomAnchors.map(b =>
+          stackedLoops(b, t, LOOP_COUNT.sc, cellSize, color, { widthFrac: 0.2 })
+        ).join('')}</g>`;
+      }
       const legs = bottomAnchors.map(b => leg(b, t, color, sw)).join('');
       return `<g>${legs}<circle cx="${t.x}" cy="${t.y}" r="${cellSize*0.12}" fill="${color}"/></g>`;
     }
@@ -380,8 +512,11 @@ export const STITCHES = {
     id: 'hdc_inc', name: 'HDC Increase', category: 'Shaping',
     height: 2, baseAnchors: 1, topAnchors: 2,
     description: '2 hdc legs from one base.',
-    renderSVG({ bottomAnchors: [b], topAnchors, cellSize, color }) {
+    renderSVG({ bottomAnchors: [b], topAnchors, cellSize, color, style }) {
       const sw = SW(cellSize);
+      if (style === 'realistic') {
+        return `<g>${topAnchors.map(t => stackedLoops(b, t, LOOP_COUNT.hdc, cellSize, color)).join('')}</g>`;
+      }
       return `<g>${topAnchors.map(t => leg(b, t, color, sw) + topHook(t, b.x, b.y, cellSize, color, sw)).join('')}</g>`;
     }
   },
@@ -390,8 +525,11 @@ export const STITCHES = {
     id: 'hdc_dec', name: 'HDC Decrease', category: 'Shaping',
     height: 2, baseAnchors: 2, topAnchors: 1,
     description: '2 hdc legs merging to one top.',
-    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color }) {
+    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color, style }) {
       const sw = SW(cellSize);
+      if (style === 'realistic') {
+        return `<g>${bottomAnchors.map(b => stackedLoops(b, t, LOOP_COUNT.hdc, cellSize, color)).join('')}</g>`;
+      }
       const legs = bottomAnchors.map(b => leg(b, t, color, sw)).join('');
       return `<g>${legs}${topHook(t, bottomAnchors[0].x, bottomAnchors[0].y, cellSize, color, sw)}</g>`;
     }
@@ -401,8 +539,11 @@ export const STITCHES = {
     id: 'dc_inc', name: 'DC Increase', category: 'Shaping',
     height: 3, baseAnchors: 1, topAnchors: 2,
     description: '2 dc legs from one base.',
-    renderSVG({ bottomAnchors: [b], topAnchors, cellSize, color }) {
+    renderSVG({ bottomAnchors: [b], topAnchors, cellSize, color, style }) {
       const sw = SW(cellSize);
+      if (style === 'realistic') {
+        return `<g>${topAnchors.map(t => stackedLoops(b, t, LOOP_COUNT.dc, cellSize, color)).join('')}</g>`;
+      }
       const parts = topAnchors.map(t => {
         const mx = (b.x + t.x) / 2, my = (b.y + t.y) / 2;
         return leg(b, t, color, sw)
@@ -417,8 +558,11 @@ export const STITCHES = {
     id: 'dc_dec', name: 'DC Decrease', category: 'Shaping',
     height: 3, baseAnchors: 2, topAnchors: 1,
     description: '2 dc legs merging into one top — pulls 2 stitches below together.',
-    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color }) {
+    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color, style }) {
       const sw = SW(cellSize);
+      if (style === 'realistic') {
+        return `<g>${bottomAnchors.map(b => stackedLoops(b, t, LOOP_COUNT.dc, cellSize, color)).join('')}</g>`;
+      }
       const parts = bottomAnchors.map(b => {
         const mx = (b.x + t.x) / 2, my = (b.y + t.y) / 2;
         return leg(b, t, color, sw)
@@ -432,8 +576,11 @@ export const STITCHES = {
     id: 'tr_dec', name: 'TR Decrease', category: 'Shaping',
     height: 4, baseAnchors: 2, topAnchors: 1,
     description: '2 tr legs merging to one top.',
-    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color }) {
+    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color, style }) {
       const sw = SW(cellSize);
+      if (style === 'realistic') {
+        return `<g>${bottomAnchors.map(b => stackedLoops(b, t, LOOP_COUNT.tr, cellSize, color)).join('')}</g>`;
+      }
       const parts = bottomAnchors.map(b => {
         let out = leg(b, t, color, sw);
         for (let i = 1; i <= 2; i++) {
@@ -454,37 +601,37 @@ export const STITCHES = {
     id: 'fpsc', name: 'Front Post SC', category: 'Post',
     height: 1, baseAnchors: 1, topAnchors: 1,
     description: 'Worked around the post of the prev-row stitch from the front.',
-    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 0, front: true }); }
+    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 0, loopCount: LOOP_COUNT.sc, front: true }); }
   },
   bpsc: {
     id: 'bpsc', name: 'Back Post SC', category: 'Post',
     height: 1, baseAnchors: 1, topAnchors: 1,
     description: 'Worked around the post from the back.',
-    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 0, front: false }); }
+    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 0, loopCount: LOOP_COUNT.sc, front: false }); }
   },
   fphdc: {
     id: 'fphdc', name: 'Front Post HDC', category: 'Post',
     height: 2, baseAnchors: 1, topAnchors: 1,
     description: 'HDC around post from the front.',
-    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 0, front: true }); }
+    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 0, loopCount: LOOP_COUNT.hdc, front: true }); }
   },
   bphdc: {
     id: 'bphdc', name: 'Back Post HDC', category: 'Post',
     height: 2, baseAnchors: 1, topAnchors: 1,
     description: 'HDC around post from the back.',
-    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 0, front: false }); }
+    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 0, loopCount: LOOP_COUNT.hdc, front: false }); }
   },
   fpdc: {
     id: 'fpdc', name: 'Front Post DC', category: 'Post',
     height: 3, baseAnchors: 1, topAnchors: 1,
     description: 'DC around post from the front — raised stitch for ribbing/cables.',
-    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 1, front: true }); }
+    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 1, loopCount: LOOP_COUNT.dc, front: true }); }
   },
   bpdc: {
     id: 'bpdc', name: 'Back Post DC', category: 'Post',
     height: 3, baseAnchors: 1, topAnchors: 1,
     description: 'DC around post from the back — recessed stitch for ribbing/cables.',
-    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 1, front: false }); }
+    renderSVG(ctx) { return renderPost({ ...ctx, crossbars: 1, loopCount: LOOP_COUNT.dc, front: false }); }
   },
 
   // DECORATIVE — fans and gathers
@@ -492,8 +639,15 @@ export const STITCHES = {
     id: 'shell', name: 'Shell', category: 'Decorative',
     height: 3, baseAnchors: 1, topAnchors: 5,
     description: '5 dc legs fanning from one base anchor.',
-    renderSVG({ bottomAnchors: [b], topAnchors, cellSize, color }) {
+    renderSVG({ bottomAnchors: [b], topAnchors, cellSize, color, style }) {
       const sw = SW(cellSize);
+      if (style === 'realistic') {
+        // Fan of dc loops — each pair of ovals tilts toward its top anchor,
+        // so they splay out like a real shell.
+        return `<g>${topAnchors.map(t =>
+          stackedLoops(b, t, LOOP_COUNT.dc, cellSize, color, { widthFrac: 0.20 })
+        ).join('')}</g>`;
+      }
       const parts = topAnchors.map(t => {
         const mx = (b.x + t.x) / 2, my = (b.y + t.y) / 2;
         return leg(b, t, color, sw)
@@ -507,8 +661,13 @@ export const STITCHES = {
     id: 'mini_shell', name: 'Mini Shell', category: 'Decorative',
     height: 2, baseAnchors: 1, topAnchors: 3,
     description: '3 hdc legs fanning from one base.',
-    renderSVG({ bottomAnchors: [b], topAnchors, cellSize, color }) {
+    renderSVG({ bottomAnchors: [b], topAnchors, cellSize, color, style }) {
       const sw = SW(cellSize);
+      if (style === 'realistic') {
+        return `<g>${topAnchors.map(t =>
+          stackedLoops(b, t, LOOP_COUNT.hdc, cellSize, color, { widthFrac: 0.22 })
+        ).join('')}</g>`;
+      }
       return `<g>${topAnchors.map(t => leg(b, t, color, sw)).join('')}</g>`;
     }
   },
@@ -517,8 +676,13 @@ export const STITCHES = {
     id: 'v_stitch', name: 'V-Stitch', category: 'Decorative',
     height: 3, baseAnchors: 1, topAnchors: 2,
     description: '2 dc legs from one base with a visible V gap.',
-    renderSVG({ bottomAnchors: [b], topAnchors, cellSize, color }) {
+    renderSVG({ bottomAnchors: [b], topAnchors, cellSize, color, style }) {
       const sw = SW(cellSize);
+      if (style === 'realistic') {
+        return `<g>${topAnchors.map(t =>
+          stackedLoops(b, t, LOOP_COUNT.dc, cellSize, color)
+        ).join('')}</g>`;
+      }
       const parts = topAnchors.map(t => {
         const mx = (b.x + t.x) / 2, my = (b.y + t.y) / 2;
         return leg(b, t, color, sw)
@@ -532,8 +696,13 @@ export const STITCHES = {
     id: 'cluster3', name: 'Cluster (3-st)', category: 'Decorative',
     height: 3, baseAnchors: 3, topAnchors: 1,
     description: '3 dc legs merging to one top — inverted fan.',
-    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color }) {
+    renderSVG({ bottomAnchors, topAnchors: [t], cellSize, color, style }) {
       const sw = SW(cellSize);
+      if (style === 'realistic') {
+        return `<g>${bottomAnchors.map(b =>
+          stackedLoops(b, t, LOOP_COUNT.dc, cellSize, color, { widthFrac: 0.20 })
+        ).join('')}</g>`;
+      }
       const parts = bottomAnchors.map(b => {
         const mx = (b.x + t.x) / 2, my = (b.y + t.y) / 2;
         return leg(b, t, color, sw)
@@ -547,9 +716,14 @@ export const STITCHES = {
     id: 'picot', name: 'Picot', category: 'Decorative',
     height: 1, baseAnchors: 1, topAnchors: 1,
     description: 'Short leg with a decorative loop on top.',
-    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) {
+    renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color, style }) {
       const sw = SW(cellSize);
       const r = cellSize * 0.22;
+      if (style === 'realistic') {
+        // Single sc loop plus a small filled chain oval on top.
+        return `<g>${stackedLoops(b, t, 1, cellSize, color)}
+          ${chainOval(t.x, t.y - r*0.5, cellSize, color, { rx: 0.2, ry: 0.12, fillOp: 0.3 })}</g>`;
+      }
       return `<g>${leg(b, t, color, sw)}
         <circle cx="${t.x}" cy="${t.y - r*0.4}" r="${r}" fill="none"
           stroke="${color}" stroke-width="${sw}"/></g>`;
@@ -591,7 +765,7 @@ export const STITCHES = {
 export const CATEGORIES = ['Foundation', 'Basic', 'Shaping', 'Post', 'Textured', 'Decorative', 'Lace'];
 
 // Helper: render a stitch into a standalone <svg> for palette previews.
-export function renderPreview(stitchId, size = 48, color = '#c084fc') {
+export function renderPreview(stitchId, size = 48, color = '#c084fc', style = 'realistic') {
   const def = STITCHES[stitchId];
   if (!def) return '';
   const cellSize = size / Math.max(def.height, 2);
@@ -623,6 +797,6 @@ export function renderPreview(stitchId, size = 48, color = '#c084fc') {
   if (baseN === 0) {
     // magic ring — fake bottom for rendering center
   }
-  const body = def.renderSVG({ bottomAnchors, topAnchors, cellSize, color });
+  const body = def.renderSVG({ bottomAnchors, topAnchors, cellSize, color, style });
   return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">${body}</svg>`;
 }

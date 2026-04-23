@@ -53,6 +53,7 @@ const isNarrow = typeof window !== 'undefined'
 
 const state = {
   cellSize: isNarrow ? 18 : 28,
+  stitchStyle: 'realistic',      // 'realistic' | 'standard'
   selectedColor: '#c084fc',
   fabricColor: '#faf7f2',
   selectedLoop: 'both',          // 'both' | 'flo' | 'blo'
@@ -128,7 +129,7 @@ const paletteApi = buildPalette(document.getElementById('palette'), (stitchId) =
   // Immediately append on selection when a row is active? No — require a click
   // on the canvas. But update cursor/status.
   statusBar.textContent = `Selected ${STITCHES[stitchId]?.name}. Click a row to place.`;
-});
+}, { getStyle: () => state.stitchStyle });
 
 // ---------- tools ----------
 
@@ -163,6 +164,14 @@ zoomReadout.textContent = state.cellSize;
 zoomInput.addEventListener('input', () => {
   state.cellSize = Number(zoomInput.value);
   zoomReadout.textContent = state.cellSize;
+  rerender();
+});
+
+const styleSelect = document.getElementById('stitch-style');
+styleSelect.value = state.stitchStyle;
+styleSelect.addEventListener('change', () => {
+  state.stitchStyle = styleSelect.value;
+  paletteApi.refresh();
   rerender();
 });
 
