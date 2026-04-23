@@ -11,6 +11,7 @@ export function setupExport({ state, canvas }) {
       mode: state.mode,
       cellSize: state.cellSize,
       selectedColor: state.selectedColor,
+      fabricColor: state.fabricColor,
       rows: state.rows,
       rounds: state.rounds,
     };
@@ -32,6 +33,7 @@ export function setupExport({ state, canvas }) {
       if (data.mode) state.mode = data.mode;
       if (data.cellSize) state.cellSize = data.cellSize;
       if (data.selectedColor) state.selectedColor = data.selectedColor;
+      if (data.fabricColor) state.fabricColor = data.fabricColor;
       if (Array.isArray(data.rows)) state.rows = data.rows;
       if (Array.isArray(data.rounds)) state.rounds = data.rounds;
       window.__constellation__?.rerender?.();

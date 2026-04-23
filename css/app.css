@@ -147,6 +147,9 @@ body {
 body.is-delete-mode .stitch { cursor: not-allowed; }
 body.is-delete-mode .stitch:hover .stitch-bg { fill: rgba(239, 68, 68, 0.25); }
 
+body.is-paint-mode .stitch { cursor: crosshair; }
+body.is-paint-mode .stitch:hover .stitch-bg { fill: rgba(240, 195, 92, 0.35); }
+
 /* Modal (pattern printout, etc.) */
 .modal-backdrop {
   position: fixed; inset: 0;

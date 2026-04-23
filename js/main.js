@@ -14,6 +14,7 @@ const state = {
   mode: 'flat',                  // 'flat' | 'round'
   cellSize: 28,
   selectedColor: '#c084fc',
+  fabricColor: '#faf7f2',
   rows: [                        // flat mode
     // Demo: 10-chain foundation + a row that consumes exactly 10 so it's valid.
     Array.from({ length: 10 }, () => ({ id: 'ch' })),
@@ -126,9 +127,15 @@ zoomInput.addEventListener('input', () => {
 document.getElementById('color').addEventListener('input', (e) => {
   state.selectedColor = e.target.value;
 });
+document.getElementById('fabric-color').addEventListener('input', (e) => {
+  state.fabricColor = e.target.value;
+  rerender();
+});
 document.getElementById('tool-add-row').addEventListener('click', () => tools.addRow());
 document.getElementById('tool-clear').addEventListener('click', () => tools.clearAll());
 document.getElementById('tool-delete').addEventListener('click', () => tools.toggleDeleteMode());
+document.getElementById('tool-paint').addEventListener('click', () => tools.togglePaintMode());
+document.getElementById('tool-paint-row').addEventListener('click', () => tools.paintActiveRow());
 
 setupExport({ state, canvas });
 

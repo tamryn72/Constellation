@@ -3,6 +3,7 @@
 export function createTools({ state, rerender, getSelectedStitch }) {
   let activeRow = (state.mode === 'round' ? state.rounds : state.rows).length - 1;
   let deleteMode = false;
+  let paintMode  = false;
 
   // The "rows" we operate on depend on mode.
   function list() { return state.mode === 'round' ? state.rounds : state.rows; }
@@ -39,9 +40,39 @@ export function createTools({ state, rerender, getSelectedStitch }) {
 
   function toggleDeleteMode() {
     deleteMode = !deleteMode;
+    if (deleteMode && paintMode) togglePaintMode();
     document.body.classList.toggle('is-delete-mode', deleteMode);
     const btn = document.getElementById('tool-delete');
     if (btn) btn.classList.toggle('is-active', deleteMode);
+  }
+
+  function togglePaintMode() {
+    paintMode = !paintMode;
+    if (paintMode && deleteMode) toggleDeleteMode();
+    document.body.classList.toggle('is-paint-mode', paintMode);
+    const btn = document.getElementById('tool-paint');
+    if (btn) btn.classList.toggle('is-active', paintMode);
+  }
+
+  function paintStitch(rowIdx, stitchIdx) {
+    const row = list()[rowIdx];
+    if (!row || !row[stitchIdx]) return;
+    row[stitchIdx].color = state.selectedColor;
+    rerender();
+  }
+
+  function paintActiveRow() {
+    const row = list()[activeRow];
+    if (!row) return;
+    row.forEach(p => { p.color = state.selectedColor; });
+    rerender();
+  }
+
+  function paintAll() {
+    for (const row of list()) {
+      for (const p of row) p.color = state.selectedColor;
+    }
+    rerender();
   }
 
   function appendStitch(stitchId) {
@@ -74,6 +105,8 @@ export function createTools({ state, rerender, getSelectedStitch }) {
         const j = Number(stitchEl.dataset.index);
         if (deleteMode) {
           deleteStitch(r, j);
+        } else if (paintMode) {
+          paintStitch(r, j);
         } else {
           setActiveRow(r);
         }
@@ -99,10 +132,14 @@ export function createTools({ state, rerender, getSelectedStitch }) {
     addRow,
     clearAll,
     toggleDeleteMode,
+    togglePaintMode,
+    paintActiveRow,
+    paintAll,
     appendStitch,
     deleteStitch,
     onModeChange,
     getActiveRow: () => activeRow,
     isDeleteMode: () => deleteMode,
+    isPaintMode: () => paintMode,
   };
 }

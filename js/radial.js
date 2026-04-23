@@ -178,7 +178,8 @@ export function render(canvas, state) {
   let out = '';
 
   // Background
-  out += `<rect x="0" y="0" width="${laid.size}" height="${laid.size}" fill="#faf7f2"/>`;
+  const fabric = state.fabricColor || '#faf7f2';
+  out += `<rect x="0" y="0" width="${laid.size}" height="${laid.size}" fill="${fabric}"/>`;
 
   // Concentric ring guides, color-coded by flat-lay status
   const LIE_COLORS = { flat: '#2cb67d', cup: '#e0ac3a', ruffle: '#ef4444' };

@@ -168,7 +168,8 @@ export function render(canvas, state) {
   let out = '';
 
   // Background + grid guides
-  out += `<rect x="0" y="0" width="${laid.width}" height="${laid.height}" fill="#faf7f2"/>`;
+  const fabric = state.fabricColor || '#faf7f2';
+  out += `<rect x="0" y="0" width="${laid.width}" height="${laid.height}" fill="${fabric}"/>`;
 
   // Row baselines
   for (let i = 0; i < laid.rows.length; i++) {

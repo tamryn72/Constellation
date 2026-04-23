@@ -37,12 +37,18 @@
   </main>
 
   <footer id="toolbar">
-    <label class="tool">
-      Color
+    <label class="tool" title="Current stitch color">
+      Yarn
       <input id="color" type="color" value="#c084fc">
     </label>
+    <label class="tool" title="Canvas / fabric background color">
+      Fabric
+      <input id="fabric-color" type="color" value="#faf7f2">
+    </label>
     <button id="tool-add-row"   class="tool-btn">+ New Row</button>
-    <button id="tool-delete"    class="tool-btn" title="Toggle delete mode">Delete mode</button>
+    <button id="tool-paint"     class="tool-btn" title="Click stitches to recolor">Paint</button>
+    <button id="tool-paint-row" class="tool-btn" title="Paint the active row/round with yarn color">Paint row</button>
+    <button id="tool-delete"    class="tool-btn" title="Toggle delete mode">Delete</button>
     <button id="tool-clear"     class="tool-btn">Clear</button>
     <span class="toolbar-spacer"></span>
     <button id="tool-save"      class="tool-btn">Save JSON</button>
