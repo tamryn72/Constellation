@@ -91,7 +91,7 @@ export function layout(state) {
     foundationTopAnchors.push(...topAnchors);
     cursorX += width;
   }
-  laidRows.push({ stitches: foundationLaid, valid: true, baselineY });
+  laidRows.push({ stitches: foundationLaid, valid: true, baselineY, rowHeight: rowHeights[0] });
   baselineY -= rowHeights[0] * cellSize;
 
   // Subsequent rows
@@ -162,7 +162,7 @@ export function layout(state) {
         delta: prevTops.length - baseCursor
       });
     }
-    laidRows.push({ stitches: laid, valid, baselineY: bY });
+    laidRows.push({ stitches: laid, valid, baselineY: bY, rowHeight: rowH });
     baselineY -= rowH * cellSize;
     prevTops = thisTops;
   }
@@ -195,11 +195,21 @@ export function render(canvas, state) {
   const fabric = state.fabricColor || '#faf7f2';
   out += `<rect x="0" y="0" width="${laid.width}" height="${laid.height}" fill="${fabric}"/>`;
 
-  // Row baselines
+  // Alternating row bands — show each row's full vertical extent.
   for (let i = 0; i < laid.rows.length; i++) {
     const r = laid.rows[i];
+    const topY = r.baselineY - (r.rowHeight || 1) * state.cellSize;
+    const bandColor = i % 2 === 0 ? 'rgba(124, 58, 237, 0.05)' : 'rgba(124, 58, 237, 0.10)';
+    out += `<rect x="0" y="${topY}" width="${laid.width}" height="${r.baselineY - topY}"
+      fill="${bandColor}"/>`;
+  }
+
+  // Row baselines + labels at the TOP of each row (with the row's stitches).
+  for (let i = 0; i < laid.rows.length; i++) {
+    const r = laid.rows[i];
+    const topY = r.baselineY - (r.rowHeight || 1) * state.cellSize;
     out += `<line class="row-baseline" x1="0" y1="${r.baselineY}" x2="${laid.width}" y2="${r.baselineY}"/>`;
-    out += `<text class="row-label" x="6" y="${r.baselineY - 4}">R${i}${r.valid ? '' : ' ⚠'}</text>`;
+    out += `<text class="row-label" x="6" y="${topY + 14}">R${i}${r.valid ? '' : ' ⚠'}</text>`;
   }
 
   // Fold lines on the active panel (flat only): horizontal between rows.
