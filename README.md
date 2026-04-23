@@ -15,6 +15,7 @@ It runs entirely in your browser. No account, no install, no backend.
 ## What you can do with it
 
 - **Two modes:** flat grid (scarves, blankets, panels) and round (coasters, hats, amigurumi, mandalas)
+- **Two render styles:** *Realistic* (default) draws each stitch as the yarn-loops it actually contains — chain = horizontal oval at the top of the cell, sc = 1 vertical loop, dc = 2 stacked loops, tr = 3, dtr = 4, trtr = 5; loops lean sideways when pulled by an increase or decrease. *Standard* uses the traditional chart glyphs (legs + crossbars + hook/X cap). Toggle in the header.
 - **39 stitch types** across basic, shaping, post, textured, decorative, and lace categories — with true-to-life SVG rendering
 - **Decreases pull stitches together** — the two legs of an sc2tog / dc2tog share a top anchor and physically lean inward, matching real fabric
 - **Flat-lay math for rounds** — each round tells you if your stitch count matches its circumference, so you can see whether it'll lie flat, cup up, or ruffle, with a suggested fix ("add 6 increases")
@@ -53,7 +54,7 @@ No build step. No dependencies. It's plain HTML, CSS, and JavaScript modules —
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│ HEADER: title · Flat/Round · Zoom                    │
+│ HEADER: title · Flat/Round · Style · Zoom            │
 ├──────────┬──────────────────────────────────────────┤
 │ PALETTE  │ Panel tabs: [Panel 1] [+ Panel]          │
 │          ├──────────────────────────────────────────┤
@@ -135,7 +136,7 @@ Flat + round modes, 39 stitches, shaping with mathematically-correct pull-togeth
 
 Bug reports, stitch suggestions, and PRs welcome. A few guidelines:
 
-- **New stitches** go in `js/stitches.js`. Every stitch defines `height`, `baseAnchors`, `topAnchors`, a `category`, and a `renderSVG({ bottomAnchors, topAnchors, cellSize, color })` function that returns a `<g>` fragment. Scale everything from `cellSize`; never hard-code pixels.
+- **New stitches** go in `js/stitches.js`. Every stitch defines `height`, `baseAnchors`, `topAnchors`, a `category`, and a `renderSVG({ bottomAnchors, topAnchors, cellSize, color, style })` function that returns a `<g>` fragment. `style` is `'realistic'` or `'standard'` — branch on it if the two looks diverge, or ignore it if one drawing works for both. Scale everything from `cellSize`; never hard-code pixels.
 - **No new build tooling.** The point of this project is that it opens and runs with `python3 -m http.server`. Please don't add webpack, vite, etc.
 - **No frameworks.** Plain DOM and SVG only.
 - **Test via the browser.** There's no unit-test suite yet; a quick manual check that your stitch renders in the palette preview, places correctly on both flat and round canvases, and produces the expected written-pattern abbreviation is sufficient for an MVP PR.

@@ -252,15 +252,23 @@ Stitches are appended to rows, not dropped at arbitrary xy. The user selects a r
 
 ## SVG Stitch Rendering
 
-Every stitch is rendered as one or more **thick legs** drawn between anchor points the grid engine has already computed. The renderer receives absolute coordinates — it doesn't do layout, only shape.
+Every stitch is rendered between anchor points the grid engine has already computed. The renderer receives absolute coordinates — it doesn't do layout, only shape.
 
 ```javascript
-renderSVG({ bottomAnchors, topAnchors, cellSize, color }) => svgString
+renderSVG({ bottomAnchors, topAnchors, cellSize, color, style }) => svgString
 // bottomAnchors: [{x, y}, ...] — one per baseAnchors
 // topAnchors:    [{x, y}, ...] — one per topAnchors
+// style: 'realistic' (default) or 'standard'
 ```
 
 All coordinates are in the same SVG coordinate space as the grid, so the renderer returns `<g>...</g>` fragments (not standalone `<svg>`s) that the grid layer composites.
+
+### Two render styles
+
+- **`'realistic'`** — each stitch is drawn as the yarn-loops it actually contains. Chain = horizontal oval at the top of the cell. sc = 1 vertical yarn-loop. hdc = 1 (taller). dc = 2 stacked loops. tr = 3. dtr = 4. trtr = 5. Loops come from the center-bottom anchor and stack upward; when an increase/decrease moves the top anchor sideways, the whole stack naturally leans. Shaping stitches (sc_dec, dc_dec, shell, cluster3…) render one stack per (base→top) pair, so they physically pull together or fan out. Implemented via the `stackedLoops()` helper in `stitches.js`.
+- **`'standard'`** — traditional international chart glyphs: leg + crossbars + hook / X cap. Preserved as an option for users who prefer the conventional notation.
+
+A stitch may ignore `style` entirely if one drawing reads clearly in both modes (e.g. chain-spaces).
 
 ### Example — Single Crochet (1→1, h=1)
 One short thick leg, with a small X cap near the top to mark it as sc.
@@ -347,10 +355,10 @@ renderSVG: ({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) => {
 ```
 
 ### Style rules
-- Stroke width scales with `cellSize` so thickness is proportional at every zoom (`cellSize * 0.18` is a good default)
+- Stroke width scales with `cellSize` but has a minimum so it stays visible at low zoom: `Math.max(1.2, cellSize * 0.12)`
 - `stroke-linecap="round"` on all legs — real crochet stitches look rounded, not blocky
 - Never hard-code pixel values; everything derives from anchors or `cellSize`
-- Leg shapes lean by geometry, never by stored rotation angles
+- Leg and loop shapes lean by geometry, never by stored rotation angles — rotation is always `atan2(t.y-b.y, t.x-b.x)`
 
 ---
 
@@ -358,7 +366,7 @@ renderSVG: ({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) => {
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  HEADER: title | Mode toggle (Flat/Round) | Zoom │
+│  HEADER: title | Mode (Flat/Round) | Style | Zoom │
 ├──────────┬──────────────────────────────────────┤
 │ PALETTE  │                                       │
 │          │          GRID CANVAS                  │
