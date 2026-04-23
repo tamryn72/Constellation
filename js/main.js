@@ -8,6 +8,7 @@ import { createTools } from './tools.js';
 import { setupExport } from './export.js';
 import { showPatternModal } from './pattern.js';
 import { buildPanelTabs } from './panels.js';
+import { showAssemblyModal } from './assembly.js';
 
 // ---------- initial state ----------
 
@@ -188,6 +189,9 @@ setupExport({ state, canvas });
 
 document.getElementById('tool-pattern').addEventListener('click', () => {
   showPatternModal(state);
+});
+document.getElementById('tool-assembly').addEventListener('click', () => {
+  showAssemblyModal(state, () => rerender());
 });
 
 // ---------- panel tabs ----------
