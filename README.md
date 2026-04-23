@@ -182,43 +182,69 @@ Granny Square, Pineapple, Bavarian, Broomstick Lace, Hairpin Lace, Waffle, Tunis
 ## Grid Engine — Flat Mode
 
 ### Responsibilities
-- Render grid as canvas or SVG overlay
-- Track which cells are occupied
-- On stitch placement: check if all required cells are free
-- If not free: show red highlight, block placement
-- If free: mark cells as occupied, render stitch SVG spanning those cells
-- Support zoom (cellSize 12–48px range)
-- Support pan (drag canvas)
+- Render the grid as an SVG canvas
+- For each row, compute the x-position of every anchor
+- For each stitch, compute its leg endpoints (bottom anchors from row below, top anchors for next row) and hand them to the stitch's `renderSVG`
+- Flag rows where `sum(baseAnchors)` doesn't match the previous row's `sum(topAnchors)` (visual warning + readout)
+- Zoom (cellSize 12–48px) and pan (drag)
 
-### Cell Occupation Logic
+### Layout Math
+Each row is rendered left-to-right. Anchor positions are computed, not stored.
+
 ```javascript
-function canPlace(stitch, col, row, state) {
-  for (let c = col; c < col + stitch.cols; c++) {
-    for (let r = row; r < row + stitch.rows; r++) {
-      if (occupiedCells[c][r]) return false;
-      if (c >= state.cols || r >= state.rows) return false;
-    }
-  }
-  return true;
-}
+// Walk a row to produce anchor x-positions for top edge of that row,
+// AND the leg endpoints for each stitch in the row.
+function layoutRow(row, prevRowTopAnchors, cellSize, rowIndex) {
+  const bottomY = (totalRows - rowIndex) * cellSize;     // row baseline
+  let baseCursor = 0;                                     // index into prevRowTopAnchors
+  let topCursor = 0;                                      // running top-anchor count in this row
+  const topAnchorsOut = [];
+  const laidOut = [];
 
-function placeStitch(stitch, col, row, color, state) {
-  if (!canPlace(stitch, col, row, state)) return false;
-  for (let c = col; c < col + stitch.cols; c++) {
-    for (let r = row; r < row + stitch.rows; r++) {
-      occupiedCells[c][r] = stitch.id;
+  for (const placed of row) {
+    const def = stitchDefs[placed.id];
+    const topY = bottomY - def.height * cellSize;
+
+    // Bottom anchors: take the next `def.baseAnchors` from prev row's top anchors
+    const bottom = prevRowTopAnchors.slice(baseCursor, baseCursor + def.baseAnchors);
+    baseCursor += def.baseAnchors;
+
+    // Top anchors: evenly spaced above this stitch's footprint.
+    // Footprint width = max(baseAnchors, topAnchors) cell-units, or span of bottom anchors.
+    const footprintLeft  = bottom.length ? bottom[0]               : topCursor * cellSize;
+    const footprintRight = bottom.length ? bottom[bottom.length-1] : (topCursor + def.topAnchors) * cellSize;
+    const top = [];
+    for (let i = 0; i < def.topAnchors; i++) {
+      const t = def.topAnchors === 1 ? 0.5 : i / (def.topAnchors - 1);
+      top.push({ x: footprintLeft + t * (footprintRight - footprintLeft), y: topY });
     }
+    topCursor += def.topAnchors;
+    topAnchorsOut.push(...top);
+
+    laidOut.push({
+      placed, def,
+      bottomAnchors: bottom.map(x => ({ x, y: bottomY })),
+      topAnchors: top,
+    });
   }
-  state.stitches.push({ id: stitch.id, originCol: col, originRow: row, color });
-  return true;
+
+  return { laidOut, topAnchorsOut, valid: baseCursor === prevRowTopAnchors.length };
 }
 ```
 
+Key properties of this math:
+- A **decrease** (base=2, top=1) has `footprintLeft` and `footprintRight` at the two base anchor x's, and its single top anchor sits at their midpoint — so its legs physically lean inward and the top aligns between them. That *is* "pulling stitches together," straight from the numbers.
+- An **increase** (base=1, top=2) has a zero-width footprint at the base, but its top anchors are spread across one cell-width to the right — legs splay outward, row widens by 1 anchor.
+- A **shell** (base=1, top=5) fans 5 top anchors across a 5-unit span from a single base point — a natural fan.
+- A **cluster** (base=N, top=1) collapses N base anchors into a single top midpoint — an inverted fan.
+
+### Placement & Editing
+Stitches are appended to rows, not dropped at arbitrary xy. The user selects a row (or a cell in it) and inserts/replaces/deletes at that position. The grid engine then re-runs `layoutRow` for the affected row and all rows above it (since top-anchor counts can change).
+
 ### Visual Feedback
-- Hover: ghost preview of stitch in selected color at cursor position
-- Red tint: stitch won't fit (overlap or out of bounds)
-- Green tint: valid placement
-- Placed stitches: full color SVG render
+- Hover: ghost preview shows the stitch drawn at the would-be anchor positions for that insertion point
+- Red underline on a row whose base-anchor sum doesn't match the row below's top-anchor sum, with a `−2` or `+1` readout showing the mismatch
+- Placed stitches render in full color
 
 ---
 
