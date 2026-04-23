@@ -30,6 +30,20 @@ const ABBREV = {
   popcorn: 'PC',
   bullion: 'bullion',
   magic_ring: 'MR',
+
+  fpsc: 'FPsc', bpsc: 'BPsc',
+  fphdc: 'FPhdc', bphdc: 'BPhdc',
+  fpdc: 'FPdc', bpdc: 'BPdc',
+
+  trtr: 'trtr',
+  rsc: 'rev sc',
+  spike: 'spike sc',
+  sc3tog: 'sc3tog',
+  hdc3tog: 'hdc3tog',
+
+  ch_sp_2: 'ch-2, sk 2',
+  ch_sp_3: 'ch-3, sk 3',
+  ch_sp_5: 'ch-5, sk 5',
 };
 
 function abbrev(id) {

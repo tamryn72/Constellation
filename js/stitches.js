@@ -98,6 +98,47 @@ function renderBasic({ bottomAnchors, topAnchors, cellSize, color, crossbars = 0
   return `<g>${out}</g>`;
 }
 
+// Chain-space factory. Renders N tiny chain links in an upward arc between
+// leftmost bottom anchor and rightmost top anchor — the standard lace glyph
+// for "ch N, skip N below". Consumes N bases, produces N tops.
+function makeChainSpace(N) {
+  return {
+    id: `ch_sp_${N}`, name: `ch-${N} space`, category: 'Lace',
+    height: 1, baseAnchors: N, topAnchors: N,
+    description: `Chain space of ${N}: ch ${N}, skip ${N} stitch${N === 1 ? '' : 'es'} below.`,
+    renderSVG({ bottomAnchors, topAnchors, cellSize, color }) {
+      const sw = SW(cellSize);
+      const bL = bottomAnchors[0];
+      const bR = bottomAnchors[bottomAnchors.length - 1];
+      const tL = topAnchors[0];
+      const tR = topAnchors[topAnchors.length - 1];
+      // Upward arch from mid-bottom to mid-top covering the span
+      const leftX  = Math.min(bL.x, tL.x);
+      const rightX = Math.max(bR.x, tR.x);
+      const midX = (leftX + rightX) / 2;
+      const topY = Math.min(tL.y, tR.y);
+      const bottomY = Math.max(bL.y, bR.y);
+      const archY = topY - cellSize * 0.05;
+      const arch = `<path d="M ${leftX} ${bottomY - cellSize*0.12}
+        Q ${midX} ${archY - cellSize*0.4} ${rightX} ${bottomY - cellSize*0.12}"
+        stroke="${color}" stroke-width="${sw*0.75}" stroke-linecap="round" fill="none"/>`;
+      // Chain beads along the arch
+      let beads = '';
+      for (let i = 0; i < N; i++) {
+        const t = N === 1 ? 0.5 : i / (N - 1);
+        const x = leftX + t * (rightX - leftX);
+        // Quadratic bezier: point at t on curve
+        const u = 1 - t;
+        const y = u*u*(bottomY - cellSize*0.12) + 2*u*t*(archY - cellSize*0.4) + t*t*(bottomY - cellSize*0.12);
+        beads += `<ellipse cx="${x}" cy="${y}" rx="${cellSize*0.15}" ry="${cellSize*0.2}"
+          transform="rotate(${-90 + (t-0.5)*60} ${x} ${y})"
+          fill="none" stroke="${color}" stroke-width="${sw*0.6}"/>`;
+      }
+      return `<g>${arch}${beads}</g>`;
+    }
+  };
+}
+
 // Post stitch: a leg that wraps around the post of the stitch below rather
 // than going into its top. front = bulge forward (toward viewer), back = away.
 // Crochet-chart convention: a little J hook at the bottom; front-post hooks
@@ -514,6 +555,12 @@ export const STITCHES = {
           stroke="${color}" stroke-width="${sw}"/></g>`;
     }
   },
+
+  // LACE / FILET — chain-space presets. A ch-N spans N stitches below
+  // (skipped) and produces N tops above, rendered as a thin arch.
+  ch_sp_2: makeChainSpace(2),
+  ch_sp_3: makeChainSpace(3),
+  ch_sp_5: makeChainSpace(5),
 
   // ROUND-MODE CENTER
   magic_ring: {
