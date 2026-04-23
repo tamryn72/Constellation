@@ -14,14 +14,16 @@ const state = {
   cellSize: 28,
   selectedColor: '#c084fc',
   rows: [                        // flat mode
-    // Demo: one foundation row + a shaped row so you see the model working.
-    Array.from({ length: 12 }, () => ({ id: 'ch' })),
+    // Demo: 10-chain foundation + a row that consumes exactly 10 so it's valid.
+    Array.from({ length: 10 }, () => ({ id: 'ch' })),
     [
       { id: 'sc' }, { id: 'sc' },
-      { id: 'sc_dec' },
-      { id: 'dc' }, { id: 'dc_dec' }, { id: 'dc' },
-      { id: 'shell' },
-      { id: 'sc' }, { id: 'sc' },
+      { id: 'sc_dec' },            // 2 → 1, legs lean inward
+      { id: 'dc' },
+      { id: 'dc_dec' },            // 2 → 1
+      { id: 'dc' },
+      { id: 'shell' },             // 1 → 5, fan
+      { id: 'sc' },                // base total: 1+1+2+1+2+1+1+1 = 10 ✓
     ],
   ],
   rounds: [                      // round mode

@@ -168,7 +168,7 @@ export function render(canvas, state) {
   let out = '';
 
   // Background + grid guides
-  out += `<rect x="0" y="0" width="${laid.width}" height="${laid.height}" fill="var(--bg-canvas, #faf7f2)"/>`;
+  out += `<rect x="0" y="0" width="${laid.width}" height="${laid.height}" fill="#faf7f2"/>`;
 
   // Row baselines
   for (let i = 0; i < laid.rows.length; i++) {

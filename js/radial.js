@@ -135,7 +135,7 @@ export function render(canvas, state) {
   let out = '';
 
   // Background
-  out += `<rect x="0" y="0" width="${laid.size}" height="${laid.size}" fill="var(--bg-canvas, #faf7f2)"/>`;
+  out += `<rect x="0" y="0" width="${laid.size}" height="${laid.size}" fill="#faf7f2"/>`;
 
   // Concentric ring guides
   if (laid.ringsLaid) {
@@ -152,7 +152,7 @@ export function render(canvas, state) {
     const r = laid.ringsLaid[i];
     if (!r.valid) {
       out += `<circle cx="${laid.cx}" cy="${laid.cy}" r="${r.outerR - 2}"
-        fill="none" stroke="var(--err, #ef4444)" stroke-width="2" stroke-dasharray="4 3" opacity="0.7"/>`;
+        fill="none" stroke="#ef4444" stroke-width="2" stroke-dasharray="4 3" opacity="0.7"/>`;
     }
   }
 
