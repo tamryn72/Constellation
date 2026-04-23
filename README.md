@@ -391,28 +391,58 @@ renderSVG: ({ bottomAnchors: [b], topAnchors: [t], cellSize, color }) => {
 
 ## Round Mode
 
-### Radial Grid Structure
-- Center point → magic ring
-- Rings expand outward, each ring = 1 round
-- Each ring divided into segments (increases as rounds grow)
-- Ring 1: 6 segments, Ring 2: 12, Ring 3: 18 etc (standard increase pattern) — but user can override
+Same anchor-and-leg model as flat, with one substitution: anchor x-positions become **angles** around a center point, and row baseline y becomes **radius**. Every piece of math and every stitch renderer carries over unchanged.
 
-### Coordinate System
+### Radial Layout
+- Center = round 0 (magic ring, which emits N top anchors as the starting count)
+- Round N's baseline radius = `(N + 1) * cellSize`
+- Round N's stitches have bottom anchors on radius N, top anchors on radius N+1
+- Angular position for each anchor: evenly divided around 2π by `sum(topAnchors)` of that round
+
 ```javascript
-// Round mode stitch placement
-{
-  ring: 2,          // which round (0 = center)
-  segment: 4,       // which segment in that ring
-  stitchId: "dc",
-  color: "#c084fc"
+function layoutRound(round, prevRoundTopAnchorAngles, roundIndex, cellSize) {
+  const rBottom = (roundIndex)     * cellSize;
+  const rTop    = (roundIndex + 1) * cellSize;
+  const totalTop = round.reduce((n, p) => n + stitchDefs[p.id].topAnchors, 0);
+  const dθ = (2 * Math.PI) / totalTop;
+
+  let baseCursor = 0;
+  let topCursor = 0;
+  const topAnglesOut = [];
+  const laidOut = [];
+
+  for (const placed of round) {
+    const def = stitchDefs[placed.id];
+    const baseAngles = prevRoundTopAnchorAngles.slice(baseCursor, baseCursor + def.baseAnchors);
+    baseCursor += def.baseAnchors;
+
+    const topAngles = [];
+    for (let i = 0; i < def.topAnchors; i++) {
+      topAngles.push((topCursor + i + 0.5) * dθ);
+    }
+    topCursor += def.topAnchors;
+    topAnglesOut.push(...topAngles);
+
+    laidOut.push({
+      placed, def,
+      bottomAnchors: baseAngles.map(a => ({ x: Math.cos(a) * rBottom, y: Math.sin(a) * rBottom })),
+      topAnchors:    topAngles.map(a => ({ x: Math.cos(a) * rTop,    y: Math.sin(a) * rTop    })),
+    });
+  }
+  return { laidOut, topAnglesOut, valid: baseCursor === prevRoundTopAnchorAngles.length };
 }
 ```
 
+### Consequences (which are also the crochet physics)
+- **Increases widen the circle.** Each round's circumference grows because `sum(topAnchors)` grows — exactly what happens when you crochet extra stitches into a round.
+- **Decreases pull it in.** `sum(topAnchors)` shrinks, so the next round's radius-to-circumference ratio tightens — the fabric cinches, just like real decreasing rounds.
+- **A shell in round mode** fans 5 top anchors across an angular arc from one base angle. Same renderer, same math.
+- **Stitches lean along their legs** — no rotation field needed. The line from bottom-anchor-at-angle-θ₁ to top-anchor-at-angle-θ₂ naturally points outward-and-sideways.
+
 ### Rendering
-- Draw as SVG polar grid
-- Each segment is a pie-slice cell
-- Stitches rendered as SVG, rotated to follow radial direction
-- Segments widen visually as rings grow (correct crochet geometry)
+- Renderers are identical to flat mode. They receive `{ bottomAnchors, topAnchors, cellSize, color }` with absolute x,y already converted from polar.
+- Grid guides: faint concentric circles at each round radius, and optional radial spokes at anchor angles.
+- Center renders `magic_ring` as a small circle with the starting anchor count indicated.
 
 ---
 
