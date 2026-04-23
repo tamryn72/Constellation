@@ -497,9 +497,10 @@ renderFromState(state);
 
 ## Notes for Coding AI
 
-- All SVGs must scale with `cellSize` — never hardcode pixel values inside stitch renderers
-- Cell occupation map must be a 2D array reset on clear/load
-- Stitch SVG spans exactly `stitch.cols * cellSize` × `stitch.rows * cellSize` px
-- Ghost preview must update on every mousemove, not just cell change
-- Round mode is a separate render pipeline, flat state is preserved when switching modes
-- JSON save must capture mode, grid dimensions, cellSize, and full stitch placement array
+- All SVGs must scale with `cellSize` — never hardcode pixel values. Stroke widths and feature sizes derive from `cellSize`.
+- Stitches don't carry absolute positions. The grid engine computes anchor coordinates by walking rows/rounds every render (or incrementally when a row above changes).
+- A row/round is valid iff `sum(baseAnchors)` of row N equals `sum(topAnchors)` of row N−1. The engine flags invalid rows but still renders them — the user is editing live.
+- No rotation field on stitches. Lean emerges from where the anchors land.
+- Renderers return `<g>` fragments in the grid's coordinate space, not standalone `<svg>`s.
+- Round mode reuses the flat rendering pipeline; only the layout function differs (polar instead of linear).
+- JSON save captures: mode, cellSize, and the full `rows` (flat) or `rounds` (round) array of placed-stitch objects. Anchor positions are never serialized — they're always recomputed from the stitch defs, which is what keeps the file tiny and the render self-consistent.
