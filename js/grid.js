@@ -126,16 +126,18 @@ export function layout(state) {
       // Clamp all bottoms to this row's bY (robustness)
       for (const b of bottomAnchors) b.y = bY;
 
-      // Footprint: horizontal extent of the stitch at this row
+      // Footprint: horizontal extent of the stitch at this row.
+      // Width is max(base span, fan span) so a 1→N stitch (shell, mini-shell,
+      // V-st, dc_inc) physically claims the cells its tops need — no more
+      // squashed fans. Stitch is centered on the midpoint of its base anchors.
       let left, right;
       if (baseN > 0) {
-        left  = bottomAnchors[0].x;
-        right = bottomAnchors[bottomAnchors.length - 1].x;
-        // Decrease collapses horizontally → give it at least a min width
-        if (right - left < cellSize * 0.001) {
-          left -= cellSize * 0.5;
-          right += cellSize * 0.5;
-        }
+        const baseMid = (bottomAnchors[0].x + bottomAnchors[bottomAnchors.length - 1].x) / 2;
+        const baseSpan = bottomAnchors[bottomAnchors.length - 1].x - bottomAnchors[0].x;
+        const fanSpan  = Math.max(topN - 1, 0) * cellSize;
+        const span     = Math.max(baseSpan, fanSpan, cellSize);
+        left  = baseMid - span / 2;
+        right = baseMid + span / 2;
       } else {
         // No base (e.g. magic ring) — anchor from prev cursor
         const baseX = prevTops.at(-1)?.x ?? leftPad;

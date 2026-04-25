@@ -736,6 +736,21 @@ export const STITCHES = {
   ch_sp_3: makeChainSpace(3),
   ch_sp_5: makeChainSpace(5),
 
+  // Skip: consumes one base anchor below, produces no tops above. Renders as
+  // a faint dotted dot at the bottom of the cell so you can see what you've
+  // placed but it doesn't read as a stitch in the chart.
+  sk: {
+    id: 'sk', name: 'Skip', category: 'Lace',
+    height: 1, baseAnchors: 1, topAnchors: 0,
+    description: 'Skip the next stitch (sk 1) — base consumed, no stitch worked.',
+    renderSVG({ bottomAnchors: [b], cellSize, color }) {
+      const r = cellSize * 0.10;
+      return `<g><circle cx="${b.x}" cy="${b.y - cellSize*0.25}" r="${r}"
+        fill="none" stroke="${color}" stroke-width="${SW(cellSize)*0.55}"
+        stroke-dasharray="2 2" opacity="0.55"/></g>`;
+    }
+  },
+
   // ROUND-MODE CENTER
   magic_ring: {
     id: 'magic_ring', name: 'Magic Ring', category: 'Foundation',

@@ -44,6 +44,8 @@ const ABBREV = {
   ch_sp_2: 'ch-2, sk 2',
   ch_sp_3: 'ch-3, sk 3',
   ch_sp_5: 'ch-5, sk 5',
+
+  sk: 'sk 1',
 };
 
 function abbrev(id) {
