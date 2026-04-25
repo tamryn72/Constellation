@@ -266,10 +266,12 @@ export const STITCHES = {
     renderSVG({ bottomAnchors: [b], topAnchors: [t], cellSize, color, style }) {
       const sw = SW(cellSize);
       if (style === 'realistic') {
-        // Horizontal oval sitting at the TOP of the cell.
+        // Horizontal oval sitting at the TOP of the cell. rx = half a cell
+        // so adjacent chain ovals meet end-to-end and read as a continuous
+        // chain instead of disconnected dots.
         const cx = t.x;
         const cy = t.y + cellSize * 0.12;
-        return `<g>${chainOval(cx, cy, cellSize, color)}</g>`;
+        return `<g>${chainOval(cx, cy, cellSize, color, { rx: 0.5 })}</g>`;
       }
       const cx = (b.x + t.x) / 2;
       const cy = (b.y + t.y) / 2;
