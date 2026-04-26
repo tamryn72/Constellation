@@ -57,6 +57,8 @@ const state = {
   selectedColor: '#c084fc',
   fabricColor: '#faf7f2',
   selectedLoop: 'both',          // 'both' | 'flo' | 'blo'
+  chainBridgeChains: 3,          // beads on the next Chain bridge
+  chainBridgeSkip:   5,          // bases the next Chain bridge consumes
   panels: [demoPanel],
   activePanelIdx: 0,
   seams: [],          // { a:{panelId, edge}, b:{panelId, edge}, note }
@@ -186,6 +188,12 @@ document.getElementById('fabric-color').addEventListener('input', (e) => {
 });
 document.getElementById('loop-mode').addEventListener('change', (e) => {
   state.selectedLoop = e.target.value;
+});
+document.getElementById('ch-chains').addEventListener('input', (e) => {
+  state.chainBridgeChains = Math.max(1, Number(e.target.value) || 1);
+});
+document.getElementById('ch-skip').addEventListener('input', (e) => {
+  state.chainBridgeSkip = Math.max(1, Number(e.target.value) || 1);
 });
 document.getElementById('tool-add-row').addEventListener('click', () => tools.addRow());
 document.getElementById('tool-clear').addEventListener('click', () => tools.clearAll());

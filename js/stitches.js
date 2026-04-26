@@ -175,50 +175,57 @@ function renderBasic({ bottomAnchors, topAnchors, cellSize, color, style, crossb
   return `<g>${out}</g>`;
 }
 
-// Chain-space factory. Renders N tiny chain links in an upward arc between
-// leftmost bottom anchor and rightmost top anchor — the standard lace glyph
-// for "ch N, skip N below". Consumes N bases, produces N tops.
+// Shared renderer for chain-space-style stitches. Draws an upward arch
+// covering the stitch's footprint, with N small chain beads along it.
+// Used by both the fixed ch_sp_N presets and the configurable ch_bridge.
+//
+// Each arch extends 0.5*cellSize past its leftmost and rightmost anchors
+// so adjacent chain stitches' arches meet at the shared boundary and read
+// as one continuous chain across the row.
+function chainSpaceRender({ bottomAnchors, topAnchors, cellSize, color, style }) {
+  const sw = SW(cellSize);
+  const N = topAnchors.length;
+  if (N === 0) return '<g></g>';
+  const bL = bottomAnchors[0];
+  const bR = bottomAnchors[bottomAnchors.length - 1];
+  const tL = topAnchors[0];
+  const tR = topAnchors[topAnchors.length - 1];
+  const leftX  = Math.min(bL.x, tL.x) - cellSize * 0.5;
+  const rightX = Math.max(bR.x, tR.x) + cellSize * 0.5;
+  const midX = (leftX + rightX) / 2;
+  const topY = Math.min(tL.y, tR.y);
+  const bottomY = Math.max(bL.y, bR.y);
+  const archY = topY - cellSize * 0.05;
+  const arch = `<path d="M ${leftX} ${bottomY - cellSize*0.12}
+    Q ${midX} ${archY - cellSize*0.4} ${rightX} ${bottomY - cellSize*0.12}"
+    stroke="${color}" stroke-width="${sw*0.75}" stroke-linecap="round" fill="none"/>`;
+  let beads = '';
+  for (let i = 0; i < N; i++) {
+    const t = N === 1 ? 0.5 : i / (N - 1);
+    const x = leftX + t * (rightX - leftX);
+    const u = 1 - t;
+    const y = u*u*(bottomY - cellSize*0.12) + 2*u*t*(archY - cellSize*0.4) + t*t*(bottomY - cellSize*0.12);
+    if (style === 'realistic') {
+      beads += chainOval(x, y, cellSize, color, { rx: 0.22, ry: 0.11 });
+    } else {
+      beads += `<ellipse cx="${x}" cy="${y}" rx="${cellSize*0.15}" ry="${cellSize*0.2}"
+        transform="rotate(${-90 + (t-0.5)*60} ${x} ${y})"
+        fill="none" stroke="${color}" stroke-width="${sw*0.6}"/>`;
+    }
+  }
+  return `<g>${arch}${beads}</g>`;
+}
+
+// Chain-space factory. Renders N tiny chain links in an upward arc.
+// Consumes N bases, produces N tops.
 function makeChainSpace(N) {
   return {
     id: `ch_sp_${N}`, name: `ch-${N} space`, category: 'Lace',
     height: 1, baseAnchors: N, topAnchors: N,
     description: `Chain space of ${N}: ch ${N}, skip ${N} stitch${N === 1 ? '' : 'es'} below.`,
-    renderSVG({ bottomAnchors, topAnchors, cellSize, color, style }) {
-      const sw = SW(cellSize);
-      const bL = bottomAnchors[0];
-      const bR = bottomAnchors[bottomAnchors.length - 1];
-      const tL = topAnchors[0];
-      const tR = topAnchors[topAnchors.length - 1];
-      // Upward arch from mid-bottom to mid-top covering the span
-      const leftX  = Math.min(bL.x, tL.x);
-      const rightX = Math.max(bR.x, tR.x);
-      const midX = (leftX + rightX) / 2;
-      const topY = Math.min(tL.y, tR.y);
-      const bottomY = Math.max(bL.y, bR.y);
-      const archY = topY - cellSize * 0.05;
-      const arch = `<path d="M ${leftX} ${bottomY - cellSize*0.12}
-        Q ${midX} ${archY - cellSize*0.4} ${rightX} ${bottomY - cellSize*0.12}"
-        stroke="${color}" stroke-width="${sw*0.75}" stroke-linecap="round" fill="none"/>`;
-      // Chain beads along the arch — horizontal ovals in realistic mode.
-      let beads = '';
-      for (let i = 0; i < N; i++) {
-        const t = N === 1 ? 0.5 : i / (N - 1);
-        const x = leftX + t * (rightX - leftX);
-        const u = 1 - t;
-        const y = u*u*(bottomY - cellSize*0.12) + 2*u*t*(archY - cellSize*0.4) + t*t*(bottomY - cellSize*0.12);
-        if (style === 'realistic') {
-          beads += chainOval(x, y, cellSize, color, { rx: 0.22, ry: 0.11 });
-        } else {
-          beads += `<ellipse cx="${x}" cy="${y}" rx="${cellSize*0.15}" ry="${cellSize*0.2}"
-            transform="rotate(${-90 + (t-0.5)*60} ${x} ${y})"
-            fill="none" stroke="${color}" stroke-width="${sw*0.6}"/>`;
-        }
-      }
-      return `<g>${arch}${beads}</g>`;
-    }
+    renderSVG: chainSpaceRender
   };
 }
-
 // Post stitch: a leg that wraps around the post of the stitch below rather
 // than going into its top. front = bulge forward (toward viewer), back = away.
 // Crochet-chart convention: a little J hook at the bottom; front-post hooks
@@ -737,6 +744,17 @@ export const STITCHES = {
   ch_sp_2: makeChainSpace(2),
   ch_sp_3: makeChainSpace(3),
   ch_sp_5: makeChainSpace(5),
+
+  // Configurable chain bridge — picks up `chains` and `skip` from the placed
+  // object (set from the toolbar Chains/Skip number boxes at placement time).
+  // Default catalogue values are sane preview numbers; the layout engine
+  // honors the placed-object overrides via placed.chains / placed.skip.
+  ch_bridge: {
+    id: 'ch_bridge', name: 'Chain bridge', category: 'Lace',
+    height: 1, baseAnchors: 5, topAnchors: 3,
+    description: 'Custom chain space — set Chains and Skip in the toolbar before tapping.',
+    renderSVG: chainSpaceRender
+  },
 
   // Skip: consumes one base anchor below, produces no tops above. Renders as
   // a faint dotted dot at the bottom of the cell so you can see what you've

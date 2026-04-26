@@ -7,8 +7,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Constellation — Crochet Pattern Designer</title>
-  <link rel="stylesheet" href="css/app.css?v=6">
-  <link rel="stylesheet" href="css/palette.css?v=6">
+  <link rel="stylesheet" href="css/app.css?v=7">
+  <link rel="stylesheet" href="css/palette.css?v=7">
 </head>
 <body>
   <header id="app-header">
@@ -64,6 +64,14 @@
         <option value="blo">BLO</option>
       </select>
     </label>
+    <label class="tool" title="Number of chains in the air for the next Chain bridge you place">
+      Chains
+      <input id="ch-chains" type="number" min="1" max="20" value="3" style="width:3.2em;">
+    </label>
+    <label class="tool" title="Number of stitches the next Chain bridge skips below">
+      Skip
+      <input id="ch-skip" type="number" min="1" max="40" value="5" style="width:3.2em;">
+    </label>
     <button id="tool-add-row"   class="tool-btn">+ New Row</button>
     <button id="tool-fold"      class="tool-btn" title="Add a fold line above the active row">+ Fold</button>
     <button id="tool-paint"     class="tool-btn" title="Click stitches to recolor">Paint</button>
@@ -82,6 +90,6 @@
     <button id="tool-pattern"   class="tool-btn">Pattern</button>
   </footer>
 
-  <script type="module" src="js/main.js?v=6"></script>
+  <script type="module" src="js/main.js?v=7"></script>
 </body>
 </html>

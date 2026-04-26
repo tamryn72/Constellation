@@ -96,6 +96,10 @@ export function createTools({ state, rerender, getSelectedStitch }) {
     if (state.selectedLoop && state.selectedLoop !== 'both') {
       placed.loop = state.selectedLoop;
     }
+    if (stitchId === 'ch_bridge') {
+      placed.chains = state.chainBridgeChains;
+      placed.skip   = state.chainBridgeSkip;
+    }
     return placed;
   }
 

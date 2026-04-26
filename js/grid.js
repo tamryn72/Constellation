@@ -108,8 +108,10 @@ export function layout(state) {
     for (const placed of row) {
       const def = STITCHES[placed.id];
       if (!def) continue;
-      const baseN = def.baseAnchors;
-      const topN  = def.topAnchors;
+      // Per-instance overrides (e.g. Chain bridge carries its own chains/skip
+      // counts set from the toolbar at placement time).
+      const baseN = placed.skip   ?? def.baseAnchors;
+      const topN  = placed.chains ?? def.topAnchors;
 
       // Consume baseN anchors from prev row
       const bottomAnchorsRaw = prevTops.slice(baseCursor, baseCursor + baseN);
