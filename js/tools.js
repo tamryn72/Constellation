@@ -79,12 +79,28 @@ export function createTools({ state, rerender, getSelectedStitch }) {
     if (!stitchId) return;
     const row = list()[activeRow];
     if (!row) return;
+    row.push(makePlaced(stitchId));
+    rerender();
+  }
+
+  function insertStitchAt(rowIdx, stitchIdx, stitchId) {
+    if (!stitchId) return;
+    const row = list()[rowIdx];
+    if (!row) return;
+    row.splice(stitchIdx, 0, makePlaced(stitchId));
+    rerender();
+  }
+
+  function makePlaced(stitchId) {
     const placed = { id: stitchId, color: state.selectedColor };
     if (state.selectedLoop && state.selectedLoop !== 'both') {
       placed.loop = state.selectedLoop;
     }
-    row.push(placed);
-    rerender();
+    if (stitchId === 'ch_bridge') {
+      placed.chains = state.chainBridgeChains;
+      placed.skip   = state.chainBridgeSkip;
+    }
+    return placed;
   }
 
   function deleteStitch(rowIdx, stitchIdx) {
@@ -112,7 +128,13 @@ export function createTools({ state, rerender, getSelectedStitch }) {
         } else if (paintMode) {
           paintStitch(r, j);
         } else {
+          // Tap an existing stitch with a palette item selected → insert
+          // the new stitch BEFORE the tapped one. Lets you place into the
+          // middle of a row (e.g. drop a shell between two stitches, then
+          // tap it to add sk's around it).
           setActiveRow(r);
+          const sel = getSelectedStitch();
+          if (sel) insertStitchAt(r, j, sel);
         }
         return;
       }
@@ -140,6 +162,7 @@ export function createTools({ state, rerender, getSelectedStitch }) {
     paintActiveRow,
     paintAll,
     appendStitch,
+    insertStitchAt,
     deleteStitch,
     onModeChange,
     getActiveRow: () => activeRow,

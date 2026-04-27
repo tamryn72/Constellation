@@ -44,6 +44,8 @@ const ABBREV = {
   ch_sp_2: 'ch-2, sk 2',
   ch_sp_3: 'ch-3, sk 3',
   ch_sp_5: 'ch-5, sk 5',
+
+  sk: 'sk 1',
 };
 
 function abbrev(id) {
@@ -51,15 +53,18 @@ function abbrev(id) {
 }
 
 // Collapse consecutive identical stitches (including loop flag) into "N abbrev".
+// Chain bridges with different chains/skip don't group together.
 function groupRow(row) {
   const groups = [];
   for (const p of row) {
     const loop = p.loop || 'both';
     const last = groups[groups.length - 1];
-    if (last && last.id === p.id && last.loop === loop) {
+    const same = last && last.id === p.id && last.loop === loop
+      && last.chains === p.chains && last.skip === p.skip;
+    if (same) {
       last.count += 1;
     } else {
-      groups.push({ id: p.id, loop, count: 1 });
+      groups.push({ id: p.id, loop, count: 1, chains: p.chains, skip: p.skip });
     }
   }
   return groups;
@@ -67,16 +72,18 @@ function groupRow(row) {
 
 // Total stitches produced by this row (sum of topAnchors).
 function topCount(row) {
-  return row.reduce((n, p) => n + (STITCHES[p.id]?.topAnchors ?? 1), 0);
+  return row.reduce((n, p) => n + (p.chains ?? STITCHES[p.id]?.topAnchors ?? 1), 0);
 }
 // Total stitches consumed from row below (sum of baseAnchors).
 function baseCount(row) {
-  return row.reduce((n, p) => n + (STITCHES[p.id]?.baseAnchors ?? 1), 0);
+  return row.reduce((n, p) => n + (p.skip ?? STITCHES[p.id]?.baseAnchors ?? 1), 0);
 }
 
 function formatGroups(groups) {
   return groups.map(g => {
-    const a = abbrev(g.id);
+    const a = g.id === 'ch_bridge'
+      ? `ch ${g.chains ?? '?'}, sk ${g.skip ?? '?'}`
+      : abbrev(g.id);
     const suffix = g.loop === 'flo' ? ' FLO' : g.loop === 'blo' ? ' BLO' : '';
     if (g.count === 1) return a + suffix;
     return `${g.count} ${a}${suffix}`;

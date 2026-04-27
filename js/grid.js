@@ -108,8 +108,10 @@ export function layout(state) {
     for (const placed of row) {
       const def = STITCHES[placed.id];
       if (!def) continue;
-      const baseN = def.baseAnchors;
-      const topN  = def.topAnchors;
+      // Per-instance overrides (e.g. Chain bridge carries its own chains/skip
+      // counts set from the toolbar at placement time).
+      const baseN = placed.skip   ?? def.baseAnchors;
+      const topN  = placed.chains ?? def.topAnchors;
 
       // Consume baseN anchors from prev row
       const bottomAnchorsRaw = prevTops.slice(baseCursor, baseCursor + baseN);
@@ -126,16 +128,18 @@ export function layout(state) {
       // Clamp all bottoms to this row's bY (robustness)
       for (const b of bottomAnchors) b.y = bY;
 
-      // Footprint: horizontal extent of the stitch at this row
+      // Footprint: horizontal extent of the stitch at this row. The stitch
+      // STARTS at its leftmost base anchor (where the user tapped) and
+      // extends rightward. If the top fan is wider than the base span
+      // (shell, mini-shell, V-st, *_inc), the fan grows to the right of
+      // the start anchor — never to the left.
       let left, right;
       if (baseN > 0) {
-        left  = bottomAnchors[0].x;
-        right = bottomAnchors[bottomAnchors.length - 1].x;
-        // Decrease collapses horizontally → give it at least a min width
-        if (right - left < cellSize * 0.001) {
-          left -= cellSize * 0.5;
-          right += cellSize * 0.5;
-        }
+        const baseLeft  = bottomAnchors[0].x;
+        const baseRight = bottomAnchors[bottomAnchors.length - 1].x;
+        const fanRight  = baseLeft + Math.max(topN - 1, 0) * cellSize;
+        left  = baseLeft;
+        right = Math.max(baseRight, fanRight);
       } else {
         // No base (e.g. magic ring) — anchor from prev cursor
         const baseX = prevTops.at(-1)?.x ?? leftPad;

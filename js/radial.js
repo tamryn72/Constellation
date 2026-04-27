@@ -92,11 +92,14 @@ export function layout(state) {
     const innerR = radii[i] + (RING_GAP * cellSize) / 2;
     const outerRingR = radii[i + 1] - (RING_GAP * cellSize) / 2;
 
+    // Per-instance overrides win (Chain bridge: placed.chains / placed.skip).
+    const tops  = (p) => p.chains ?? STITCHES[p.id]?.topAnchors  ?? 1;
+    const bases = (p) => p.skip   ?? STITCHES[p.id]?.baseAnchors ?? 1;
     // Total top anchors this round — determines angular spacing of THIS round's tops.
-    const totalTopN = round.reduce((n, p) => n + (STITCHES[p.id]?.topAnchors ?? 1), 0);
+    const totalTopN  = round.reduce((n, p) => n + tops(p), 0);
     const dθ = totalTopN > 0 ? (2 * Math.PI / totalTopN) : 0;
 
-    const totalBaseN = round.reduce((n, p) => n + (STITCHES[p.id]?.baseAnchors ?? 1), 0);
+    const totalBaseN = round.reduce((n, p) => n + bases(p), 0);
     const valid = totalBaseN === prevTops.length;
     if (!valid) {
       warnings.push({
@@ -114,8 +117,8 @@ export function layout(state) {
     for (const placed of round) {
       const def = STITCHES[placed.id];
       if (!def) continue;
-      const baseN = def.baseAnchors;
-      const topN = def.topAnchors;
+      const baseN = placed.skip   ?? def.baseAnchors;
+      const topN  = placed.chains ?? def.topAnchors;
 
       // Bottom angles consumed from previous round's top angles
       const baseAngles = [];
